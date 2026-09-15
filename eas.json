@@ -3,9 +3,12 @@
     "version": ">= 24.4.2",
     "appVersionSource": "remote"
   },
-"build": {
+  "build": {
     "development": {
       "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
       "distribution": "internal",
       "env": {
         "EXPO_ROUTER_DISABLE_RN_NAVIGATION_CHECK": "1"
