@@ -1,0 +1,248 @@
+// src/screens/Feed.tsx
+import React, { useEffect, useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  Image,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+} from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { supabase } from '../lib/supabase';
+
+type Profile = {
+  id: string;
+  display_name: string | null;
+  birth_date: string | null;
+  city: string | null;
+  bio: string | null;
+  sobriety_status: 'trezv' | 'v_sryve' | 'ne_ukazano';
+  photo_url: string | null;
+};
+
+const SOBRIETY_LABEL: Record<string, string> = {
+  trezv: 'Трезв(а)',
+  v_sryve: 'Сейчас непросто',
+  ne_ukazano: 'Статус не указан',
+};
+
+function calcAge(birthDate: string | null): number | null {
+  if (!birthDate) return null;
+  const diff = Date.now() - new Date(birthDate).getTime();
+  return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
+}
+
+export default function Feed() {
+  const navigation = useNavigation<any>();
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [actingOnId, setActingOnId] = useState<string | null>(null);
+  const [myId, setMyId] = useState<string | null>(null);
+
+  const loadFeed = useCallback(async () => {
+    setLoading(true);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    setMyId(user.id);
+
+    // 1. Кого я уже блокировал или кто заблокировал меня — исключаем в обе стороны
+    const { data: blocksData } = await supabase
+      .from('blocks')
+      .select('blocker_id, blocked_id')
+      .or(`blocker_id.eq.${user.id},blocked_id.eq.${user.id}`);
+
+    const blockedIds = new Set<string>();
+    (blocksData || []).forEach((b) => {
+      blockedIds.add(b.blocker_id === user.id ? b.blocked_id : b.blocker_id);
+    });
+
+    // 2. Кому я уже поставил лайк или скип — не показываем повторно
+    const { data: actedData } = await supabase
+      .from('matches')
+      .select('user_b')
+      .eq('user_a', user.id);
+
+    const actedIds = new Set((actedData || []).map((m) => m.user_b));
+
+    const excludeIds = [user.id, ...blockedIds, ...actedIds];
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, display_name, birth_date, city, bio, sobriety_status, photo_url')
+      .eq('moderation_status', 'approved')
+      .not('id', 'in', `(${excludeIds.join(',')})`)
+      .limit(20);
+
+    setLoading(false);
+
+    if (error) {
+      console.warn('Ошибка загрузки ленты:', error.message);
+      return;
+    }
+
+    setProfiles(data || []);
+  }, []);
+
+  useEffect(() => {
+    loadFeed();
+  }, [loadFeed]);
+
+  async function handleAction(target: Profile, action: 'like' | 'skip') {
+    if (!myId) return;
+    setActingOnId(target.id);
+
+    if (action === 'skip') {
+      await supabase.from('matches').insert({
+        user_a: myId,
+        user_b: target.id,
+        status: 'rejected',
+      });
+      setProfiles((prev) => prev.filter((p) => p.id !== target.id));
+      setActingOnId(null);
+      return;
+    }
+
+    // action === 'like' — проверяем, нет ли встречного лайка от этого человека
+    const { data: reverseMatch } = await supabase
+      .from('matches')
+      .select('id, status')
+      .eq('user_a', target.id)
+      .eq('user_b', myId)
+      .maybeSingle();
+
+    if (reverseMatch && reverseMatch.status === 'pending') {
+      // Взаимный лайк — обновляем существующую запись до matched
+      await supabase
+        .from('matches')
+        .update({ status: 'matched', matched_at: new Date().toISOString() })
+        .eq('id', reverseMatch.id);
+
+      setProfiles((prev) => prev.filter((p) => p.id !== target.id));
+      setActingOnId(null);
+      Alert.alert('Это совпадение! 🎉', `Вы с ${target.display_name || 'этим человеком'} понравились друг другу.`, [
+        { text: 'Написать сообщение', onPress: () => navigation.navigate('ChatList') },
+        { text: 'Продолжить смотреть анкеты', style: 'cancel' },
+      ]);
+      return;
+    }
+
+    // Обычный лайк без взаимности пока
+    await supabase.from('matches').insert({
+      user_a: myId,
+      user_b: target.id,
+      status: 'pending',
+    });
+
+    setProfiles((prev) => prev.filter((p) => p.id !== target.id));
+    setActingOnId(null);
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#2563eb" />
+      </View>
+    );
+  }
+
+  if (profiles.length === 0) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.emptyTitle}>Анкет пока нет</Text>
+        <Text style={styles.emptyBody}>
+          Загляните позже — новые анкеты появляются по мере роста сообщества.
+        </Text>
+        <TouchableOpacity style={styles.refreshButton} onPress={loadFeed}>
+          <Text style={styles.refreshButtonText}>Обновить</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView contentContainerStyle={styles.list}>
+      {profiles.map((profile) => {
+        const age = calcAge(profile.birth_date);
+        const busy = actingOnId === profile.id;
+
+        return (
+          <View key={profile.id} style={styles.card}>
+            {profile.photo_url ? (
+              <Image source={{ uri: profile.photo_url }} style={styles.photo} />
+            ) : (
+              <View style={[styles.photo, styles.photoPlaceholder]}>
+                <Text style={styles.photoPlaceholderText}>Нет фото</Text>
+              </View>
+            )}
+
+            <View style={styles.cardBody}>
+              <Text style={styles.name}>
+                {profile.display_name || 'Без имени'}
+                {age ? `, ${age}` : ''}
+              </Text>
+              {profile.city && <Text style={styles.city}>{profile.city}</Text>}
+              <Text style={styles.sobriety}>{SOBRIETY_LABEL[profile.sobriety_status]}</Text>
+              {profile.bio && <Text style={styles.bio}>{profile.bio}</Text>}
+            </View>
+
+            <View style={styles.actions}>
+              <TouchableOpacity
+                style={styles.skipButton}
+                onPress={() => handleAction(profile, 'skip')}
+                disabled={busy}
+              >
+                <Text style={styles.skipButtonText}>Пропустить</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.likeButton}
+                onPress={() => handleAction(profile, 'like')}
+                disabled={busy}
+              >
+                {busy ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.likeButtonText}>Нравится</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: '#fff' },
+  emptyTitle: { fontSize: 18, fontWeight: '600', marginBottom: 8 },
+  emptyBody: { fontSize: 14, color: '#666', textAlign: 'center', marginBottom: 20 },
+  refreshButton: { backgroundColor: '#2563eb', borderRadius: 8, paddingVertical: 12, paddingHorizontal: 24 },
+  refreshButtonText: { color: '#fff', fontWeight: '600' },
+  list: { padding: 16, backgroundColor: '#fff' },
+  card: {
+    borderWidth: 1,
+    borderColor: '#eee',
+    borderRadius: 12,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  photo: { width: '100%', height: 260, backgroundColor: '#f0f0f0' },
+  photoPlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  photoPlaceholderText: { color: '#999' },
+  cardBody: { padding: 14 },
+  name: { fontSize: 18, fontWeight: '600', marginBottom: 4 },
+  city: { fontSize: 14, color: '#666', marginBottom: 4 },
+  sobriety: { fontSize: 13, color: '#2563eb', fontWeight: '600', marginBottom: 8 },
+  bio: { fontSize: 14, color: '#333', lineHeight: 20 },
+  actions: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#eee' },
+  skipButton: { flex: 1, padding: 14, alignItems: 'center', borderRightWidth: 1, borderRightColor: '#eee' },
+  skipButtonText: { color: '#666', fontWeight: '600' },
+  likeButton: { flex: 1, padding: 14, alignItems: 'center', backgroundColor: '#2563eb' },
+  likeButtonText: { color: '#fff', fontWeight: '600' },
+});
