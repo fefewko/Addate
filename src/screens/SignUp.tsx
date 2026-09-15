@@ -104,18 +104,22 @@ export default function SignUp() {
     >
       <Text style={styles.title}>Регистрация</Text>
 
+      <Text style={styles.label}>Email</Text>
       <TextInput
         style={styles.input}
-        placeholder="Email"
+        placeholderTextColor="#8a8a8e"
+        placeholder="you@example.com"
         autoCapitalize="none"
         keyboardType="email-address"
         value={email}
         onChangeText={setEmail}
       />
 
+      <Text style={styles.label}>Пароль</Text>
       <TextInput
         style={styles.input}
-        placeholder="Пароль"
+        placeholderTextColor="#8a8a8e"
+        placeholder="Не короче 6 символов"
         secureTextEntry
         value={password}
         onChangeText={setPassword}
@@ -156,11 +160,14 @@ export default function SignUp() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: '#fff' },
-  title: { fontSize: 24, fontWeight: '600', marginBottom: 24, textAlign: 'center' },
+  container: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: '#121212' },
+  title: { fontSize: 24, fontWeight: '600', marginBottom: 24, textAlign: 'center', color: '#f0f0f0' },
+  label: { fontSize: 13, fontWeight: '600', color: '#a0a0a5', marginBottom: 6, marginLeft: 2 },
   input: {
+    backgroundColor: '#1c1c1e',
+    color: '#f0f0f0',
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#2a2a2a',
     borderRadius: 8,
     padding: 14,
     marginBottom: 12,
@@ -171,18 +178,18 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderWidth: 1.5,
-    borderColor: '#999',
+    borderColor: '#9a9a9e',
     borderRadius: 4,
     marginRight: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkboxChecked: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
+  checkboxChecked: { backgroundColor: '#3b82f6', borderColor: '#3b82f6' },
   checkboxMark: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  checkboxLabel: { flex: 1, fontSize: 13, color: '#333' },
-  error: { color: '#dc2626', marginBottom: 12, fontSize: 14 },
+  checkboxLabel: { flex: 1, fontSize: 13, color: '#f0f0f0' },
+  error: { color: '#f87171', marginBottom: 12, fontSize: 14 },
   button: {
-    backgroundColor: '#2563eb',
+    backgroundColor: '#3b82f6',
     borderRadius: 8,
     padding: 16,
     alignItems: 'center',
@@ -190,5 +197,5 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  link: { textAlign: 'center', marginTop: 16, color: '#2563eb', fontSize: 14 },
+  link: { textAlign: 'center', marginTop: 16, color: '#3b82f6', fontSize: 14 },
 });

@@ -35,12 +35,33 @@ const SUBSTANCE_OPTIONS = [
   { value: 'other', label: 'Другое' },
 ];
 
-// Простая проверка формата даты YYYY-MM-DD и возраста 18+
-function validateBirthDate(value: string): string | null {
-  const match = /^\d{4}-\d{2}-\d{2}$/.test(value);
-  if (!match) return 'Введите дату в формате ГГГГ-ММ-ДД';
+// Пользователь вводит дату как ДД.ММ.ГГГГ — привычнее для русскоязычной аудитории.
+// В базу данных при этом уходит стандартный ISO-формат ГГГГ-ММ-ДД.
 
-  const date = new Date(value);
+// Автоматически вставляет точки по мере ввода: "01012000" -> "01.01.2000"
+function formatBirthDateInput(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 8);
+  const day = digits.slice(0, 2);
+  const month = digits.slice(2, 4);
+  const year = digits.slice(4, 8);
+
+  if (digits.length <= 2) return day;
+  if (digits.length <= 4) return `${day}.${month}`;
+  return `${day}.${month}.${year}`;
+}
+
+function ddmmyyyyToISO(value: string): string | null {
+  const match = value.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (!match) return null;
+  const [, day, month, year] = match;
+  return `${year}-${month}-${day}`;
+}
+
+function validateBirthDate(value: string): string | null {
+  const iso = ddmmyyyyToISO(value);
+  if (!iso) return 'Введите дату в формате ДД.ММ.ГГГГ';
+
+  const date = new Date(iso);
   if (isNaN(date.getTime())) return 'Некорректная дата';
 
   const age = (Date.now() - date.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
@@ -148,11 +169,13 @@ export default function ProfileSetup() {
       return;
     }
 
+    const isoBirthDate = ddmmyyyyToISO(birthDate);
+
     const { error: updateError } = await supabase
       .from('profiles')
       .update({
         display_name: displayName.trim(),
-        birth_date: birthDate,
+        birth_date: isoBirthDate,
         city: city.trim() || null,
         bio: bio.trim() || null,
         sobriety_status: sobrietyStatus,
@@ -184,25 +207,38 @@ export default function ProfileSetup() {
         )}
       </TouchableOpacity>
 
+      <Text style={styles.label}>Имя</Text>
       <TextInput
         style={styles.input}
-        placeholder="Имя"
+        placeholderTextColor="#8a8a8e"
+        placeholder="Как вас называть"
         value={displayName}
         onChangeText={setDisplayName}
       />
 
+      <Text style={styles.label}>Дата рождения</Text>
       <TextInput
         style={styles.input}
-        placeholder="Дата рождения (ГГГГ-ММ-ДД)"
+        placeholderTextColor="#8a8a8e"
+        placeholder="ДД.ММ.ГГГГ"
         value={birthDate}
-        onChangeText={setBirthDate}
-        keyboardType="numbers-and-punctuation"
+        onChangeText={(text) => setBirthDate(formatBirthDateInput(text))}
+        keyboardType="number-pad"
+        maxLength={10}
       />
 
-      <TextInput style={styles.input} placeholder="Город" value={city} onChangeText={setCity} />
+      <Text style={styles.label}>Город</Text>
+      <TextInput
+        style={styles.input}
+        placeholderTextColor="#8a8a8e"
+        placeholder="Например, Москва"
+        value={city}
+        onChangeText={setCity}
+      />
 
       <TextInput
         style={[styles.input, styles.textArea]}
+        placeholderTextColor="#8a8a8e"
         placeholder="О себе (необязательно)"
         value={bio}
         onChangeText={setBio}
@@ -259,57 +295,60 @@ export default function ProfileSetup() {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 24, paddingBottom: 48, backgroundColor: '#fff' },
-  title: { fontSize: 22, fontWeight: '600', marginBottom: 20, textAlign: 'center' },
+  container: { padding: 24, paddingBottom: 48, backgroundColor: '#121212' },
+  title: { fontSize: 22, fontWeight: '600', marginBottom: 20, textAlign: 'center', color: '#f0f0f0' },
+  label: { fontSize: 13, fontWeight: '600', color: '#a0a0a5', marginBottom: 6, marginLeft: 2 },
   photoPicker: {
     alignSelf: 'center',
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#2a2a2a',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
     overflow: 'hidden',
   },
   photo: { width: 120, height: 120 },
-  photoPlaceholder: { color: '#888', fontSize: 13, textAlign: 'center', paddingHorizontal: 8 },
+  photoPlaceholder: { color: '#9a9a9e', fontSize: 13, textAlign: 'center', paddingHorizontal: 8 },
   input: {
+    backgroundColor: '#1c1c1e',
+    color: '#f0f0f0',
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#2a2a2a',
     borderRadius: 8,
     padding: 14,
     marginBottom: 12,
     fontSize: 16,
   },
   textArea: { height: 90, textAlignVertical: 'top' },
-  sectionLabel: { fontSize: 14, fontWeight: '600', marginTop: 12, marginBottom: 8, color: '#333' },
+  sectionLabel: { fontSize: 14, fontWeight: '600', marginTop: 12, marginBottom: 8, color: '#f0f0f0' },
   radioRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   radio: {
     width: 20,
     height: 20,
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#999',
+    borderColor: '#9a9a9e',
     marginRight: 10,
   },
-  radioSelected: { borderColor: '#2563eb', backgroundColor: '#2563eb' },
+  radioSelected: { borderColor: '#3b82f6', backgroundColor: '#3b82f6' },
   checkbox: {
     width: 20,
     height: 20,
     borderRadius: 4,
     borderWidth: 1.5,
-    borderColor: '#999',
+    borderColor: '#9a9a9e',
     marginRight: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkboxChecked: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
+  checkboxChecked: { backgroundColor: '#3b82f6', borderColor: '#3b82f6' },
   checkboxMark: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  radioLabel: { fontSize: 15, color: '#333' },
-  error: { color: '#dc2626', marginVertical: 12, fontSize: 14 },
+  radioLabel: { fontSize: 15, color: '#f0f0f0' },
+  error: { color: '#f87171', marginVertical: 12, fontSize: 14 },
   button: {
-    backgroundColor: '#2563eb',
+    backgroundColor: '#3b82f6',
     borderRadius: 8,
     padding: 16,
     alignItems: 'center',

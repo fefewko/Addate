@@ -146,7 +146,7 @@ export default function Feed() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#2563eb" />
+        <ActivityIndicator size="large" color="#3b82f6" />
       </View>
     );
   }
@@ -219,30 +219,30 @@ export default function Feed() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: '#fff' },
-  emptyTitle: { fontSize: 18, fontWeight: '600', marginBottom: 8 },
-  emptyBody: { fontSize: 14, color: '#666', textAlign: 'center', marginBottom: 20 },
-  refreshButton: { backgroundColor: '#2563eb', borderRadius: 8, paddingVertical: 12, paddingHorizontal: 24 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: '#121212' },
+  emptyTitle: { fontSize: 18, fontWeight: '600', marginBottom: 8, color: '#f0f0f0' },
+  emptyBody: { fontSize: 14, color: '#a0a0a5', textAlign: 'center', marginBottom: 20 },
+  refreshButton: { backgroundColor: '#3b82f6', borderRadius: 8, paddingVertical: 12, paddingHorizontal: 24 },
   refreshButtonText: { color: '#fff', fontWeight: '600' },
-  list: { padding: 16, backgroundColor: '#fff' },
+  list: { padding: 16, backgroundColor: '#121212' },
   card: {
     borderWidth: 1,
-    borderColor: '#eee',
+    borderColor: '#2a2a2a',
     borderRadius: 12,
     marginBottom: 16,
     overflow: 'hidden',
   },
-  photo: { width: '100%', height: 260, backgroundColor: '#f0f0f0' },
+  photo: { width: '100%', height: 260, backgroundColor: '#2a2a2a' },
   photoPlaceholder: { alignItems: 'center', justifyContent: 'center' },
-  photoPlaceholderText: { color: '#999' },
+  photoPlaceholderText: { color: '#9a9a9e' },
   cardBody: { padding: 14 },
-  name: { fontSize: 18, fontWeight: '600', marginBottom: 4 },
-  city: { fontSize: 14, color: '#666', marginBottom: 4 },
-  sobriety: { fontSize: 13, color: '#2563eb', fontWeight: '600', marginBottom: 8 },
-  bio: { fontSize: 14, color: '#333', lineHeight: 20 },
-  actions: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#eee' },
-  skipButton: { flex: 1, padding: 14, alignItems: 'center', borderRightWidth: 1, borderRightColor: '#eee' },
-  skipButtonText: { color: '#666', fontWeight: '600' },
-  likeButton: { flex: 1, padding: 14, alignItems: 'center', backgroundColor: '#2563eb' },
+  name: { fontSize: 18, fontWeight: '600', marginBottom: 4, color: '#f0f0f0' },
+  city: { fontSize: 14, color: '#a0a0a5', marginBottom: 4 },
+  sobriety: { fontSize: 13, color: '#3b82f6', fontWeight: '600', marginBottom: 8 },
+  bio: { fontSize: 14, color: '#f0f0f0', lineHeight: 20 },
+  actions: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#2a2a2a' },
+  skipButton: { flex: 1, padding: 14, alignItems: 'center', borderRightWidth: 1, borderRightColor: '#2a2a2a' },
+  skipButtonText: { color: '#a0a0a5', fontWeight: '600' },
+  likeButton: { flex: 1, padding: 14, alignItems: 'center', backgroundColor: '#3b82f6' },
   likeButtonText: { color: '#fff', fontWeight: '600' },
 });

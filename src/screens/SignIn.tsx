@@ -100,18 +100,22 @@ export default function SignIn() {
     >
       <Text style={styles.title}>Вход</Text>
 
+      <Text style={styles.label}>Email</Text>
       <TextInput
         style={styles.input}
-        placeholder="Email"
+        placeholderTextColor="#8a8a8e"
+        placeholder="you@example.com"
         autoCapitalize="none"
         keyboardType="email-address"
         value={email}
         onChangeText={setEmail}
       />
 
+      <Text style={styles.label}>Пароль</Text>
       <TextInput
         style={styles.input}
-        placeholder="Пароль"
+        placeholderTextColor="#8a8a8e"
+        placeholder="Ваш пароль"
         secureTextEntry
         value={password}
         onChangeText={setPassword}
@@ -143,19 +147,22 @@ export default function SignIn() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: '#fff' },
-  title: { fontSize: 24, fontWeight: '600', marginBottom: 24, textAlign: 'center' },
+  container: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: '#121212' },
+  title: { fontSize: 24, fontWeight: '600', marginBottom: 24, textAlign: 'center', color: '#f0f0f0' },
+  label: { fontSize: 13, fontWeight: '600', color: '#a0a0a5', marginBottom: 6, marginLeft: 2 },
   input: {
+    backgroundColor: '#1c1c1e',
+    color: '#f0f0f0',
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#2a2a2a',
     borderRadius: 8,
     padding: 14,
     marginBottom: 12,
     fontSize: 16,
   },
-  error: { color: '#dc2626', marginBottom: 12, fontSize: 14 },
+  error: { color: '#f87171', marginBottom: 12, fontSize: 14 },
   button: {
-    backgroundColor: '#2563eb',
+    backgroundColor: '#3b82f6',
     borderRadius: 8,
     padding: 16,
     alignItems: 'center',
@@ -163,5 +170,5 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  link: { textAlign: 'center', marginTop: 16, color: '#2563eb', fontSize: 14 },
+  link: { textAlign: 'center', marginTop: 16, color: '#3b82f6', fontSize: 14 },
 });

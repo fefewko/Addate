@@ -216,6 +216,7 @@ export default function Chat() {
       <View style={styles.inputRow}>
         <TextInput
           style={styles.input}
+        placeholderTextColor="#8a8a8e"
           placeholder="Сообщение..."
           value={text}
           onChangeText={setText}
@@ -234,34 +235,36 @@ export default function Chat() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
+  container: { flex: 1, backgroundColor: '#121212' },
   header: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
     padding: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: '#2a2a2a',
   },
   headerButton: { marginLeft: 16 },
-  headerButtonText: { fontSize: 13, color: '#666' },
-  blockText: { color: '#dc2626' },
+  headerButtonText: { fontSize: 13, color: '#a0a0a5' },
+  blockText: { color: '#f87171' },
   messageList: { padding: 14, flexGrow: 1 },
   bubble: { maxWidth: '78%', borderRadius: 14, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 8 },
-  bubbleMine: { backgroundColor: '#2563eb', alignSelf: 'flex-end' },
-  bubbleTheirs: { backgroundColor: '#f0f0f0', alignSelf: 'flex-start' },
+  bubbleMine: { backgroundColor: '#3b82f6', alignSelf: 'flex-end' },
+  bubbleTheirs: { backgroundColor: '#2a2a2a', alignSelf: 'flex-start' },
   bubbleTextMine: { color: '#fff', fontSize: 15 },
-  bubbleTextTheirs: { color: '#111', fontSize: 15 },
+  bubbleTextTheirs: { color: '#f0f0f0', fontSize: 15 },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     padding: 10,
     borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
+    borderTopColor: '#2a2a2a',
   },
   input: {
+    backgroundColor: '#1c1c1e',
+    color: '#f0f0f0',
     flex: 1,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#2a2a2a',
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -269,7 +272,7 @@ const styles = StyleSheet.create({
     maxHeight: 100,
     fontSize: 15,
   },
-  sendButton: { backgroundColor: '#2563eb', borderRadius: 18, paddingHorizontal: 16, paddingVertical: 10 },
+  sendButton: { backgroundColor: '#3b82f6', borderRadius: 18, paddingHorizontal: 16, paddingVertical: 10 },
   sendButtonDisabled: { opacity: 0.5 },
   sendButtonText: { color: '#fff', fontWeight: '600' },
 });

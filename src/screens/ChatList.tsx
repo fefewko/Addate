@@ -83,7 +83,7 @@ export default function ChatList() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#2563eb" />
+        <ActivityIndicator size="large" color="#3b82f6" />
       </View>
     );
   }
@@ -133,21 +133,21 @@ export default function ChatList() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: '#fff' },
-  emptyTitle: { fontSize: 18, fontWeight: '600', marginBottom: 8 },
-  emptyBody: { fontSize: 14, color: '#666', textAlign: 'center' },
+  container: { flex: 1, backgroundColor: '#121212' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: '#121212' },
+  emptyTitle: { fontSize: 18, fontWeight: '600', marginBottom: 8, color: '#f0f0f0' },
+  emptyBody: { fontSize: 14, color: '#a0a0a5', textAlign: 'center' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: '#2a2a2a',
   },
-  avatar: { width: 52, height: 52, borderRadius: 26, marginRight: 12, backgroundColor: '#f0f0f0' },
+  avatar: { width: 52, height: 52, borderRadius: 26, marginRight: 12, backgroundColor: '#2a2a2a' },
   avatarPlaceholder: { alignItems: 'center', justifyContent: 'center' },
-  avatarPlaceholderText: { fontSize: 18, fontWeight: '600', color: '#999' },
+  avatarPlaceholderText: { fontSize: 18, fontWeight: '600', color: '#9a9a9e' },
   rowBody: { flex: 1 },
-  name: { fontSize: 16, fontWeight: '600' },
-  hint: { fontSize: 13, color: '#999', marginTop: 2 },
+  name: { fontSize: 16, fontWeight: '600', color: '#f0f0f0' },
+  hint: { fontSize: 13, color: '#9a9a9e', marginTop: 2 },
 });
