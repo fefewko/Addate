@@ -614,7 +614,7 @@ export default function AllUsers() {
 
                   <View style={styles.cardBody}>
                     <View style={styles.nameRow}>
-                      <Text style={styles.name}>
+                      <Text style={styles.name} numberOfLines={1}>
                         {profile.display_name || 'Без имени'}
                         {age ? `, ${age}` : ''}
                       </Text>
@@ -625,12 +625,24 @@ export default function AllUsers() {
                         ]}
                       />
                     </View>
-                    {profile.city && <Text style={styles.city}>{profile.city}</Text>}
-                    {formatDistance(profile.distanceKm) && (
-                      <Text style={styles.distance}>{formatDistance(profile.distanceKm)}</Text>
+                    {profile.city && (
+                      <Text style={styles.city} numberOfLines={1}>
+                        {profile.city}
+                      </Text>
                     )}
-                    <Text style={styles.sobriety}>{SOBRIETY_LABEL[profile.sobriety_status]}</Text>
-                    {profile.bio && <Text style={styles.bio}>{profile.bio}</Text>}
+                    {formatDistance(profile.distanceKm) && (
+                      <Text style={styles.distance} numberOfLines={1}>
+                        {formatDistance(profile.distanceKm)}
+                      </Text>
+                    )}
+                    <Text style={styles.sobriety} numberOfLines={1}>
+                      {SOBRIETY_LABEL[profile.sobriety_status]}
+                    </Text>
+                    {profile.bio && (
+                      <Text style={styles.bio} numberOfLines={2}>
+                        {profile.bio}
+                      </Text>
+                    )}
                   </View>
                 </TouchableOpacity>
 
@@ -639,7 +651,7 @@ export default function AllUsers() {
                     style={styles.messageButton}
                     onPress={() => setQuickChat({ matchId: match.matchId, otherName: profile.display_name })}
                   >
-                    <Text style={styles.likeButtonText}>Написать сообщение</Text>
+                    <Text style={styles.likeButtonText}>Написать</Text>
                   </TouchableOpacity>
                 ) : (
                   <TouchableOpacity
@@ -758,31 +770,44 @@ const styles = StyleSheet.create({
   },
   filterBarText: { color: '#a0a0a5', fontSize: 13 },
   filterBarReset: { color: '#3b82f6', fontSize: 13, fontWeight: '600' },
-  list: { padding: 16, backgroundColor: '#121212' },
-  card: { borderWidth: 1, borderColor: '#2a2a2a', borderRadius: 12, marginBottom: 16, overflow: 'hidden' },
-  photo: { width: '100%', height: 220, backgroundColor: '#1c1c1e' },
+  list: {
+    padding: 12,
+    backgroundColor: '#121212',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  card: {
+    width: '48.5%',
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    borderRadius: 12,
+    marginBottom: 12,
+    overflow: 'hidden',
+  },
+  photo: { width: '100%', height: 140, backgroundColor: '#1c1c1e' },
   photoPlaceholder: { alignItems: 'center', justifyContent: 'center' },
-  photoPlaceholderText: { color: '#8a8a8e' },
-  cardBody: { padding: 14 },
-  name: { fontSize: 18, fontWeight: '600', marginBottom: 4, color: '#f0f0f0' },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  onlineDot: { width: 9, height: 9, borderRadius: 5, marginBottom: 4 },
-  city: { fontSize: 14, color: '#a0a0a5', marginBottom: 4 },
-  distance: { fontSize: 13, color: '#a0a0a5', marginBottom: 4, fontStyle: 'italic' },
-  sobriety: { fontSize: 13, color: '#3b82f6', fontWeight: '600', marginBottom: 8 },
-  bio: { fontSize: 14, color: '#f0f0f0', lineHeight: 20 },
+  photoPlaceholderText: { color: '#8a8a8e', fontSize: 12 },
+  cardBody: { padding: 10 },
+  name: { fontSize: 14, fontWeight: '600', marginBottom: 2, color: '#f0f0f0' },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  onlineDot: { width: 7, height: 7, borderRadius: 4, marginBottom: 2 },
+  city: { fontSize: 12, color: '#a0a0a5', marginBottom: 2 },
+  distance: { fontSize: 11, color: '#a0a0a5', marginBottom: 2, fontStyle: 'italic' },
+  sobriety: { fontSize: 11, color: '#3b82f6', fontWeight: '600', marginBottom: 4 },
+  bio: { fontSize: 12, color: '#f0f0f0', lineHeight: 16 },
   likeButton: {
     backgroundColor: '#3b82f6',
-    padding: 14,
+    paddingVertical: 10,
     alignItems: 'center',
     borderTopWidth: 1,
     borderTopColor: '#2a2a2a',
   },
   likeButtonDone: { backgroundColor: '#2a2a2a' },
-  likeButtonText: { color: '#fff', fontWeight: '600' },
+  likeButtonText: { color: '#fff', fontWeight: '600', fontSize: 12 },
   messageButton: {
     backgroundColor: '#22c55e',
-    padding: 14,
+    paddingVertical: 10,
     alignItems: 'center',
     borderTopWidth: 1,
     borderTopColor: '#2a2a2a',
