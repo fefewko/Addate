@@ -4,24 +4,24 @@
     "slug": "ADDate",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/logo.png",
+    "icon": "./assets/Logo.png",
     "scheme": "addate",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#121212",
     "ios": {
-      "icon": "./assets/logo.png"
+      "icon": "./assets/Logo.png"
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#121212",
-        "foregroundImage": "./assets/logo.png"
+        "foregroundImage": "./assets/Logo.png"
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.addate.ADDate"
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/logo.png"
+      "favicon": "./assets/Logo.png"
     },
     "plugins": [
       [
@@ -34,7 +34,7 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#121212",
-          "image": "./assets/logo.png",
+          "image": "./assets/Logo.png",
           "imageWidth": 120
         }
       ]
