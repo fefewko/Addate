@@ -251,32 +251,6 @@ export default function Profile() {
     Alert.alert('Сохранено', 'Изменения профиля сохранены.');
   }
 
-  function handleDeleteProfile() {
-    Alert.alert(
-      'Удалить анкету?',
-      'Анкета, фото, совпадения и переписки будут удалены безвозвратно. Само действие необратимо.',
-      [
-        { text: 'Отмена', style: 'cancel' },
-        {
-          text: 'Удалить',
-          style: 'destructive',
-          onPress: async () => {
-            if (!userId) return;
-            // Удаление строки профиля каскадно удалит matches, messages, reports, blocks,
-            // ссылающиеся на неё (см. schema.sql, ON DELETE CASCADE).
-            const { error } = await supabase.from('profiles').delete().eq('id', userId);
-            if (error) {
-              Alert.alert('Ошибка', 'Не удалось удалить анкету: ' + error.message);
-              return;
-            }
-            await supabase.auth.signOut();
-            navigation.reset({ index: 0, routes: [{ name: 'SignIn' }] });
-          },
-        },
-      ]
-    );
-  }
-
   async function handleSignOut() {
     await supabase.auth.signOut();
     navigation.reset({ index: 0, routes: [{ name: 'SignIn' }] });
@@ -430,10 +404,6 @@ export default function Profile() {
       <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
         <Text style={styles.signOutButtonText}>Выйти из аккаунта</Text>
       </TouchableOpacity>
-
-      <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteProfile}>
-        <Text style={styles.deleteButtonText}>Удалить анкету</Text>
-      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -510,6 +480,4 @@ const styles = StyleSheet.create({
   saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   signOutButton: { padding: 16, alignItems: 'center', marginTop: 12 },
   signOutButtonText: { color: '#a0a0a5', fontSize: 15 },
-  deleteButton: { padding: 16, alignItems: 'center', marginTop: 4 },
-  deleteButtonText: { color: '#f87171', fontSize: 15, fontWeight: '600' },
 });

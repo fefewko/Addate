@@ -1,11 +1,13 @@
 // src/screens/Settings.tsx
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Switch, Alert, ScrollView, Linking } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
 import { supabase } from '../lib/supabase';
 
 export default function Settings() {
+  const navigation = useNavigation<any>();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [updatingLocation, setUpdatingLocation] = useState(false);
 
@@ -33,6 +35,36 @@ export default function Settings() {
       Alert.alert('Ошибка', 'Не удалось обновить геопозицию: ' + e.message);
     }
     setUpdatingLocation(false);
+  }
+
+  async function handleDeleteProfile() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
+    Alert.alert(
+      'Удалить анкету?',
+      'Анкета, фото, совпадения и переписки будут удалены безвозвратно. Само действие необратимо.',
+      [
+        { text: 'Отмена', style: 'cancel' },
+        {
+          text: 'Удалить',
+          style: 'destructive',
+          onPress: async () => {
+            // Удаление строки профиля каскадно удалит matches, messages, reports, blocks,
+            // ссылающиеся на неё (см. schema.sql, ON DELETE CASCADE).
+            const { error } = await supabase.from('profiles').delete().eq('id', user.id);
+            if (error) {
+              Alert.alert('Ошибка', 'Не удалось удалить анкету: ' + error.message);
+              return;
+            }
+            await supabase.auth.signOut();
+            navigation.reset({ index: 0, routes: [{ name: 'SignIn' }] });
+          },
+        },
+      ]
+    );
   }
 
   return (
@@ -68,6 +100,11 @@ export default function Settings() {
       >
         <Text style={styles.actionText}>Написать в поддержку</Text>
       </TouchableOpacity>
+
+      <Text style={styles.sectionTitle}>Опасная зона</Text>
+      <TouchableOpacity style={styles.dangerRow} onPress={handleDeleteProfile}>
+        <Text style={styles.dangerText}>Удалить анкету</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -97,4 +134,13 @@ const styles = StyleSheet.create({
   actionRow: { backgroundColor: '#1c1c1e', borderRadius: 10, padding: 14, marginBottom: 8 },
   actionText: { color: '#3b82f6', fontSize: 14, fontWeight: '600' },
   hint: { color: '#8a8a8e', fontSize: 12, marginBottom: 8 },
+  dangerRow: {
+    backgroundColor: '#1c1c1e',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#3a1d1d',
+  },
+  dangerText: { color: '#f87171', fontSize: 14, fontWeight: '600', textAlign: 'center' },
 });
