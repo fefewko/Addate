@@ -51,11 +51,11 @@ export default function App() {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('moderation_status')
+      .select('moderation_status, display_name')
       .eq('id', session.user.id)
       .maybeSingle();
 
-    if (!profile) {
+    if (!profile || !profile.display_name) {
       setInitialRoute('ProfileSetup');
     } else if (profile.moderation_status === 'approved') {
       setInitialRoute('Tabs');

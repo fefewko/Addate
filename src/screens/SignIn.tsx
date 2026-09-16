@@ -61,9 +61,11 @@ export default function SignIn() {
     }
 
     // Проверяем, есть ли профиль и на какой он стадии модерации
+    // Проверяем не только наличие профиля, но и заполнена ли анкета —
+    // пустая запись (created at signup) не должна считаться "на модерации"
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('moderation_status')
+      .select('moderation_status, display_name')
       .eq('id', userId)
       .maybeSingle();
 
@@ -74,8 +76,8 @@ export default function SignIn() {
       return;
     }
 
-    if (!profile) {
-      // Регистрация была прервана до создания профиля
+    if (!profile || !profile.display_name) {
+      // Анкета ещё не заполнена — неважно, что стоит в moderation_status
       navigation.reset({ index: 0, routes: [{ name: 'ProfileSetup' }] });
       return;
     }
