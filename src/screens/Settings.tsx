@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Switch, Alert, ScrollView, Linking } from 'react-native';
 import * as Location from 'expo-location';
+import Constants from 'expo-constants';
 import { supabase } from '../lib/supabase';
 
 export default function Settings() {
@@ -59,7 +60,7 @@ export default function Settings() {
       <Text style={styles.sectionTitle}>О приложении</Text>
       <View style={styles.row}>
         <Text style={styles.rowLabel}>Версия</Text>
-        <Text style={styles.rowValue}>1.0.0</Text>
+        <Text style={styles.rowValue}>{Constants.expoConfig?.version || '—'}</Text>
       </View>
       <TouchableOpacity
         style={styles.actionRow}
