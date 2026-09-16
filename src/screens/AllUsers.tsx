@@ -21,7 +21,14 @@ type Profile = {
   bio: string | null;
   sobriety_status: 'trezv' | 'v_sryve' | 'ne_ukazano';
   photo_url: string | null;
+  distanceKm?: number;
 };
+
+function formatDistance(km: number | undefined): string | null {
+  if (km === undefined) return null;
+  if (km < 1) return 'Меньше 1 км от вас';
+  return `~${Math.round(km)} км от вас`;
+}
 
 const SOBRIETY_LABEL: Record<string, string> = {
   trezv: 'Чист(а)',
@@ -77,14 +84,31 @@ export default function AllUsers() {
       .not('id', 'in', `(${excludeIds.join(',')})`)
       .order('created_at', { ascending: false });
 
-    setLoading(false);
-
     if (error) {
+      setLoading(false);
       console.warn('Ошибка загрузки списка пользователей:', error.message);
       return;
     }
 
-    setProfiles(data || []);
+    const { data: myProfile } = await supabase
+      .from('profiles')
+      .select('latitude, longitude')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    let distanceMap = new Map<string, number>();
+    if (myProfile?.latitude != null && myProfile?.longitude != null) {
+      const { data: distances } = await supabase.rpc('nearby_profiles', {
+        viewer_lat: myProfile.latitude,
+        viewer_lng: myProfile.longitude,
+      });
+      (distances || []).forEach((d: { profile_id: string; distance_km: number }) => {
+        distanceMap.set(d.profile_id, d.distance_km);
+      });
+    }
+
+    setLoading(false);
+    setProfiles((data || []).map((p) => ({ ...p, distanceKm: distanceMap.get(p.id) })));
   }, []);
 
   useEffect(() => {
@@ -164,6 +188,9 @@ export default function AllUsers() {
                 {age ? `, ${age}` : ''}
               </Text>
               {profile.city && <Text style={styles.city}>{profile.city}</Text>}
+              {formatDistance(profile.distanceKm) && (
+                <Text style={styles.distance}>{formatDistance(profile.distanceKm)}</Text>
+              )}
               <Text style={styles.sobriety}>{SOBRIETY_LABEL[profile.sobriety_status]}</Text>
               {profile.bio && <Text style={styles.bio}>{profile.bio}</Text>}
             </View>
@@ -199,6 +226,7 @@ const styles = StyleSheet.create({
   cardBody: { padding: 14 },
   name: { fontSize: 18, fontWeight: '600', marginBottom: 4, color: '#f0f0f0' },
   city: { fontSize: 14, color: '#a0a0a5', marginBottom: 4 },
+  distance: { fontSize: 13, color: '#a0a0a5', marginBottom: 4, fontStyle: 'italic' },
   sobriety: { fontSize: 13, color: '#3b82f6', fontWeight: '600', marginBottom: 8 },
   bio: { fontSize: 14, color: '#f0f0f0', lineHeight: 20 },
   likeButton: {

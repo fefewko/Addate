@@ -11,6 +11,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import * as Location from 'expo-location';
 import { supabase } from '../lib/supabase';
 
 type Profile = {
@@ -21,6 +22,7 @@ type Profile = {
   bio: string | null;
   sobriety_status: 'trezv' | 'v_sryve' | 'ne_ukazano';
   photo_url: string | null;
+  distanceKm?: number;
 };
 
 const SOBRIETY_LABEL: Record<string, string> = {
@@ -28,6 +30,12 @@ const SOBRIETY_LABEL: Record<string, string> = {
   v_sryve: 'Сейчас непросто',
   ne_ukazano: 'Статус не указан',
 };
+
+function formatDistance(km: number | undefined): string | null {
+  if (km === undefined) return null;
+  if (km < 1) return 'Меньше 1 км от вас';
+  return `~${Math.round(km)} км от вас`;
+}
 
 function calcAge(birthDate: string | null): number | null {
   if (!birthDate) return null;
@@ -42,6 +50,21 @@ export default function Feed() {
   const [actingOnId, setActingOnId] = useState<string | null>(null);
   const [myId, setMyId] = useState<string | null>(null);
 
+  const updateMyLocation = useCallback(async (userId: string) => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return; // молча пропускаем — фича необязательная
+
+      const position = await Location.getCurrentPositionAsync({});
+      await supabase
+        .from('profiles')
+        .update({ latitude: position.coords.latitude, longitude: position.coords.longitude })
+        .eq('id', userId);
+    } catch (e) {
+      console.warn('Не удалось получить геопозицию:', e);
+    }
+  }, []);
+
   const loadFeed = useCallback(async () => {
     setLoading(true);
 
@@ -50,6 +73,8 @@ export default function Feed() {
     } = await supabase.auth.getUser();
     if (!user) return;
     setMyId(user.id);
+
+    await updateMyLocation(user.id);
 
     // 1. Кого я уже блокировал или кто заблокировал меня — исключаем в обе стороны
     const { data: blocksData } = await supabase
@@ -79,15 +104,36 @@ export default function Feed() {
       .not('id', 'in', `(${excludeIds.join(',')})`)
       .limit(20);
 
-    setLoading(false);
-
     if (error) {
+      setLoading(false);
       console.warn('Ошибка загрузки ленты:', error.message);
       return;
     }
 
-    setProfiles(data || []);
-  }, []);
+    // Расстояния считаются на сервере (см. функцию nearby_profiles) —
+    // клиент никогда не получает точные координаты других пользователей,
+    // только готовое значение в километрах. Это осознанное решение по
+    // безопасности для приложения такой тематики.
+    const { data: myProfile } = await supabase
+      .from('profiles')
+      .select('latitude, longitude')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    let distanceMap = new Map<string, number>();
+    if (myProfile?.latitude != null && myProfile?.longitude != null) {
+      const { data: distances } = await supabase.rpc('nearby_profiles', {
+        viewer_lat: myProfile.latitude,
+        viewer_lng: myProfile.longitude,
+      });
+      (distances || []).forEach((d: { profile_id: string; distance_km: number }) => {
+        distanceMap.set(d.profile_id, d.distance_km);
+      });
+    }
+
+    setLoading(false);
+    setProfiles((data || []).map((p) => ({ ...p, distanceKm: distanceMap.get(p.id) })));
+  }, [updateMyLocation]);
 
   useEffect(() => {
     loadFeed();
@@ -187,6 +233,9 @@ export default function Feed() {
                 {age ? `, ${age}` : ''}
               </Text>
               {profile.city && <Text style={styles.city}>{profile.city}</Text>}
+              {formatDistance(profile.distanceKm) && (
+                <Text style={styles.distance}>{formatDistance(profile.distanceKm)}</Text>
+              )}
               <Text style={styles.sobriety}>{SOBRIETY_LABEL[profile.sobriety_status]}</Text>
               {profile.bio && <Text style={styles.bio}>{profile.bio}</Text>}
             </View>
@@ -238,6 +287,7 @@ const styles = StyleSheet.create({
   cardBody: { padding: 14 },
   name: { fontSize: 18, fontWeight: '600', marginBottom: 4, color: '#f0f0f0' },
   city: { fontSize: 14, color: '#a0a0a5', marginBottom: 4 },
+  distance: { fontSize: 13, color: '#a0a0a5', marginBottom: 4, fontStyle: 'italic' },
   sobriety: { fontSize: 13, color: '#3b82f6', fontWeight: '600', marginBottom: 8 },
   bio: { fontSize: 14, color: '#f0f0f0', lineHeight: 20 },
   actions: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#2a2a2a' },

@@ -31,6 +31,12 @@
         }
       ],
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Разрешите доступ к геолокации, чтобы показывать анкеты поблизости от вас."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#121212",

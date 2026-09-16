@@ -5,6 +5,7 @@ import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { supabase } from './src/lib/supabase';
 
@@ -21,9 +22,37 @@ import Profile from './src/screens/Profile';
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
+const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  Feed: 'flame',
+  AllUsers: 'people',
+  ChatList: 'chatbubbles',
+  Profile: 'person-circle',
+};
+
 function Tabs() {
   return (
-    <Tab.Navigator screenOptions={{ headerShown: true }}>
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: true,
+        tabBarIcon: ({ color, size, focused }) => (
+          <Ionicons
+            name={
+              (focused
+                ? TAB_ICONS[route.name]
+                : (`${TAB_ICONS[route.name]}-outline` as keyof typeof Ionicons.glyphMap)) ||
+              'ellipse'
+            }
+            size={size}
+            color={color}
+          />
+        ),
+        tabBarActiveTintColor: '#3b82f6',
+        tabBarInactiveTintColor: '#8a8a8e',
+        tabBarStyle: { backgroundColor: '#121212', borderTopColor: '#2a2a2a' },
+        headerStyle: { backgroundColor: '#121212' },
+        headerTintColor: '#f0f0f0',
+      })}
+    >
       <Tab.Screen name="Feed" component={Feed} options={{ title: 'Анкеты' }} />
       <Tab.Screen name="AllUsers" component={AllUsers} options={{ title: 'Все' }} />
       <Tab.Screen name="ChatList" component={ChatList} options={{ title: 'Сообщения' }} />
