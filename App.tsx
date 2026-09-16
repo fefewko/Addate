@@ -18,6 +18,7 @@ import AllUsers from './src/screens/AllUsers';
 import ChatList from './src/screens/ChatList';
 import Chat from './src/screens/Chat';
 import Profile from './src/screens/Profile';
+import Settings from './src/screens/Settings';
 import ProfileDetail from './src/screens/ProfileDetail';
 
 const Stack = createNativeStackNavigator();
@@ -195,6 +196,11 @@ export default function App() {
           options={{ title: 'Анкета', headerStyle: { backgroundColor: '#121212' }, headerTintColor: '#f0f0f0' }}
         />
         <Stack.Screen name="Chat" component={Chat} options={{ title: 'Чат' }} />
+        <Stack.Screen
+          name="Settings"
+          component={Settings}
+          options={{ title: 'Настройки', headerStyle: { backgroundColor: '#121212' }, headerTintColor: '#f0f0f0' }}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );

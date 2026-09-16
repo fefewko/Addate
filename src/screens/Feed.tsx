@@ -94,13 +94,15 @@ export default function Feed() {
       blockedIds.add(b.blocker_id === user.id ? b.blocked_id : b.blocker_id);
     });
 
-    // 2. Кому я уже поставил лайк или скип — не показываем повторно
+    // 2. Кому я уже поставил лайк/скип, или кто уже совпал со мной (в любом направлении)
     const { data: actedData } = await supabase
       .from('matches')
-      .select('user_b')
-      .eq('user_a', user.id);
+      .select('user_a, user_b')
+      .or(`user_a.eq.${user.id},user_b.eq.${user.id}`);
 
-    const actedIds = new Set((actedData || []).map((m) => m.user_b));
+    const actedIds = new Set(
+      (actedData || []).map((m) => (m.user_a === user.id ? m.user_b : m.user_a))
+    );
 
     const excludeIds = [user.id, ...blockedIds, ...actedIds];
 

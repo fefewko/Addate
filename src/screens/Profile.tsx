@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '../lib/supabase';
 
 type SobrietyStatus = 'trezv' | 'v_sryve' | 'ne_ukazano';
@@ -51,6 +52,14 @@ export default function Profile() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [original, setOriginal] = useState<{
+    city: string;
+    heightCm: string;
+    weightKg: string;
+    bio: string;
+    sobrietyStatus: SobrietyStatus;
+    substances: string[];
+  } | null>(null);
 
   const loadProfile = useCallback(async () => {
     setLoading(true);
@@ -83,7 +92,26 @@ export default function Profile() {
     setSubstances(data.substance_type || []);
     setPhotoUrl(data.photo_url);
     setAdditionalPhotos(data.additional_photos || []);
+
+    setOriginal({
+      city: data.city || '',
+      heightCm: data.height_cm ? String(data.height_cm) : '',
+      weightKg: data.weight_kg ? String(data.weight_kg) : '',
+      bio: data.bio || '',
+      sobrietyStatus: data.sobriety_status || 'ne_ukazano',
+      substances: data.substance_type || [],
+    });
   }, []);
+
+  const isDirty =
+    original !== null &&
+    (city !== original.city ||
+      heightCm !== original.heightCm ||
+      weightKg !== original.weightKg ||
+      bio !== original.bio ||
+      sobrietyStatus !== original.sobrietyStatus ||
+      substances.length !== original.substances.length ||
+      substances.some((s) => !original.substances.includes(s)));
 
   useFocusEffect(
     useCallback(() => {
@@ -158,6 +186,8 @@ export default function Profile() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.7,
+      allowsEditing: true,
+      aspect: [3, 4],
     });
 
     if (result.canceled || !result.assets?.[0]?.uri || !userId) return;
@@ -217,6 +247,7 @@ export default function Profile() {
       return;
     }
 
+    setOriginal({ city, heightCm, weightKg, bio, sobrietyStatus, substances });
     Alert.alert('Сохранено', 'Изменения профиля сохранены.');
   }
 
@@ -250,6 +281,16 @@ export default function Profile() {
     await supabase.auth.signOut();
     navigation.reset({ index: 0, routes: [{ name: 'SignIn' }] });
   }
+
+  React.useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity onPress={() => navigation.navigate('Settings')} style={{ paddingHorizontal: 12 }}>
+          <Ionicons name="settings-outline" size={22} color="#f0f0f0" />
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation]);
 
   if (loading) {
     return (
@@ -376,13 +417,15 @@ export default function Profile() {
       </View>
       <Text style={styles.hint}>Долгое нажатие на фото — удалить</Text>
 
-      <TouchableOpacity
-        style={[styles.saveButton, saving && styles.buttonDisabled]}
-        onPress={handleSave}
-        disabled={saving}
-      >
-        {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveButtonText}>Сохранить изменения</Text>}
-      </TouchableOpacity>
+      {isDirty && (
+        <TouchableOpacity
+          style={[styles.saveButton, saving && styles.buttonDisabled]}
+          onPress={handleSave}
+          disabled={saving}
+        >
+          {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveButtonText}>Сохранить изменения</Text>}
+        </TouchableOpacity>
+      )}
 
       <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
         <Text style={styles.signOutButtonText}>Выйти из аккаунта</Text>
