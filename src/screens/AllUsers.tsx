@@ -12,8 +12,12 @@ import {
   Alert,
   Modal,
   PanResponder,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '../lib/supabase';
 
@@ -221,6 +225,145 @@ const sliderStyles = StyleSheet.create({
   },
 });
 
+type Message = { id: string; match_id: string; sender_id: string; content: string; created_at: string };
+
+// Компактный чат прямо во всплывающем окне — чтобы можно было ответить
+// человеку, не покидая вкладку "Все" и не переходя в "Сообщения".
+function QuickChatModal({
+  visible,
+  matchId,
+  otherName,
+  myId,
+  onClose,
+}: {
+  visible: boolean;
+  matchId: string | null;
+  otherName: string | null;
+  myId: string | null;
+  onClose: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const listRef = useRef<FlatList>(null);
+
+  useEffect(() => {
+    if (!visible || !matchId || !myId) return;
+
+    let active = true;
+
+    async function load() {
+      setLoading(true);
+      const { data } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('match_id', matchId)
+        .order('created_at', { ascending: true });
+
+      if (active) {
+        setMessages(data || []);
+        setLoading(false);
+      }
+
+      await supabase
+        .from('messages')
+        .update({ read_at: new Date().toISOString() })
+        .eq('match_id', matchId)
+        .neq('sender_id', myId)
+        .is('read_at', null);
+    }
+    load();
+
+    const channel = supabase
+      .channel(`quickchat-${matchId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `match_id=eq.${matchId}` },
+        (payload) => {
+          setMessages((prev) => [...prev, payload.new as Message]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      active = false;
+      supabase.removeChannel(channel);
+    };
+  }, [visible, matchId, myId]);
+
+  async function handleSend() {
+    if (!text.trim() || !myId || !matchId) return;
+    setSending(true);
+    const content = text.trim();
+    setText('');
+
+    const { error } = await supabase.from('messages').insert({ match_id: matchId, sender_id: myId, content });
+    setSending(false);
+    if (error) {
+      Alert.alert('Ошибка', 'Не удалось отправить сообщение.');
+      setText(content);
+    }
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        style={styles.quickChatContainer}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <View style={styles.quickChatHeader}>
+          <Text style={styles.quickChatTitle}>{otherName || 'Чат'}</Text>
+          <TouchableOpacity onPress={onClose} style={{ padding: 4 }}>
+            <Ionicons name="close" size={26} color="#f0f0f0" />
+          </TouchableOpacity>
+        </View>
+
+        {loading ? (
+          <View style={styles.center}>
+            <ActivityIndicator size="large" color="#3b82f6" />
+          </View>
+        ) : (
+          <FlatList
+            ref={listRef}
+            data={messages}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.quickChatList}
+            onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+            renderItem={({ item }) => {
+              const isMine = item.sender_id === myId;
+              return (
+                <View style={[styles.bubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}>
+                  <Text style={isMine ? styles.bubbleTextMine : styles.bubbleTextTheirs}>{item.content}</Text>
+                </View>
+              );
+            }}
+          />
+        )}
+
+        <View style={[styles.quickChatInputRow, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+          <TextInput
+            style={styles.quickChatInput}
+            placeholder="Сообщение..."
+            placeholderTextColor="#8a8a8e"
+            value={text}
+            onChangeText={setText}
+            multiline
+          />
+          <TouchableOpacity
+            style={[styles.quickChatSend, (!text.trim() || sending) && styles.buttonDisabledOpacity]}
+            onPress={handleSend}
+            disabled={!text.trim() || sending}
+          >
+            <Text style={styles.quickChatSendText}>Отправить</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
 export default function AllUsers() {
   const navigation = useNavigation<any>();
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -230,6 +373,7 @@ export default function AllUsers() {
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const [filtersVisible, setFiltersVisible] = useState(false);
+  const [quickChat, setQuickChat] = useState<{ matchId: string; otherName: string | null } | null>(null);
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [draftFilters, setDraftFilters] = useState<Filters>(DEFAULT_FILTERS);
 
@@ -353,15 +497,7 @@ export default function AllUsers() {
       Alert.alert('Это совпадение! 🎉', `Вы с ${target.display_name || 'этим человеком'} понравились друг другу.`, [
         {
           text: 'Написать сообщение',
-          onPress: () => {
-            const age = calcAge(target.birth_date);
-            navigation.navigate('Chat', {
-              matchId: reverseMatch.id,
-              otherUserId: target.id,
-              otherName: target.display_name,
-              otherAge: age,
-            });
-          },
+          onPress: () => setQuickChat({ matchId: reverseMatch.id, otherName: target.display_name }),
         },
         { text: 'Продолжить', style: 'cancel' },
       ]);
@@ -501,14 +637,7 @@ export default function AllUsers() {
                 {match?.status === 'matched' ? (
                   <TouchableOpacity
                     style={styles.messageButton}
-                    onPress={() =>
-                      navigation.navigate('Chat', {
-                        matchId: match.matchId,
-                        otherUserId: profile.id,
-                        otherName: profile.display_name,
-                        otherAge: age,
-                      })
-                    }
+                    onPress={() => setQuickChat({ matchId: match.matchId, otherName: profile.display_name })}
                   >
                     <Text style={styles.likeButtonText}>Написать сообщение</Text>
                   </TouchableOpacity>
@@ -601,6 +730,14 @@ export default function AllUsers() {
           </View>
         </View>
       </Modal>
+
+      <QuickChatModal
+        visible={!!quickChat}
+        matchId={quickChat?.matchId || null}
+        otherName={quickChat?.otherName || null}
+        myId={myId}
+        onClose={() => setQuickChat(null)}
+      />
     </View>
   );
 }
@@ -684,4 +821,44 @@ const styles = StyleSheet.create({
   applyButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   resetLink: { padding: 14, alignItems: 'center' },
   resetLinkText: { color: '#a0a0a5', fontSize: 14 },
+  quickChatContainer: { flex: 1, backgroundColor: '#121212' },
+  quickChatHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    paddingTop: 50,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2a2a',
+  },
+  quickChatTitle: { fontSize: 18, fontWeight: '700', color: '#f0f0f0' },
+  quickChatList: { padding: 14, flexGrow: 1 },
+  bubble: { maxWidth: '78%', borderRadius: 14, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 8 },
+  bubbleMine: { backgroundColor: '#3b82f6', alignSelf: 'flex-end' },
+  bubbleTheirs: { backgroundColor: '#2a2a2a', alignSelf: 'flex-start' },
+  bubbleTextMine: { color: '#fff', fontSize: 15 },
+  bubbleTextTheirs: { color: '#f0f0f0', fontSize: 15 },
+  quickChatInputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    padding: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#2a2a2a',
+  },
+  quickChatInput: {
+    flex: 1,
+    backgroundColor: '#1c1c1e',
+    color: '#f0f0f0',
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginRight: 8,
+    maxHeight: 100,
+    fontSize: 15,
+  },
+  quickChatSend: { backgroundColor: '#3b82f6', borderRadius: 18, paddingHorizontal: 16, paddingVertical: 10 },
+  quickChatSendText: { color: '#fff', fontWeight: '600' },
+  buttonDisabledOpacity: { opacity: 0.5 },
 });
