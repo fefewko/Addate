@@ -22,8 +22,15 @@ type Profile = {
   bio: string | null;
   sobriety_status: 'trezv' | 'v_sryve' | 'ne_ukazano';
   photo_url: string | null;
+  last_seen_at: string | null;
   distanceKm?: number;
 };
+
+const ONLINE_THRESHOLD_MS = 3 * 60 * 1000;
+function isOnline(lastSeenAt: string | null): boolean {
+  if (!lastSeenAt) return false;
+  return Date.now() - new Date(lastSeenAt).getTime() < ONLINE_THRESHOLD_MS;
+}
 
 const SOBRIETY_LABEL: Record<string, string> = {
   trezv: 'Трезв(а)',
@@ -99,7 +106,7 @@ export default function Feed() {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, display_name, birth_date, city, bio, sobriety_status, photo_url')
+      .select('id, display_name, birth_date, city, bio, sobriety_status, photo_url, last_seen_at')
       .eq('moderation_status', 'approved')
       .not('id', 'in', `(${excludeIds.join(',')})`)
       .limit(20);
@@ -219,26 +226,34 @@ export default function Feed() {
 
         return (
           <View key={profile.id} style={styles.card}>
-            {profile.photo_url ? (
-              <Image source={{ uri: profile.photo_url }} style={styles.photo} />
-            ) : (
-              <View style={[styles.photo, styles.photoPlaceholder]}>
-                <Text style={styles.photoPlaceholderText}>Нет фото</Text>
-              </View>
-            )}
-
-            <View style={styles.cardBody}>
-              <Text style={styles.name}>
-                {profile.display_name || 'Без имени'}
-                {age ? `, ${age}` : ''}
-              </Text>
-              {profile.city && <Text style={styles.city}>{profile.city}</Text>}
-              {formatDistance(profile.distanceKm) && (
-                <Text style={styles.distance}>{formatDistance(profile.distanceKm)}</Text>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => navigation.navigate('ProfileDetail', { profileId: profile.id })}
+            >
+              {profile.photo_url ? (
+                <Image source={{ uri: profile.photo_url }} style={styles.photo} />
+              ) : (
+                <View style={[styles.photo, styles.photoPlaceholder]}>
+                  <Text style={styles.photoPlaceholderText}>Нет фото</Text>
+                </View>
               )}
-              <Text style={styles.sobriety}>{SOBRIETY_LABEL[profile.sobriety_status]}</Text>
-              {profile.bio && <Text style={styles.bio}>{profile.bio}</Text>}
-            </View>
+
+              <View style={styles.cardBody}>
+                <View style={styles.nameRow}>
+                  <Text style={styles.name}>
+                    {profile.display_name || 'Без имени'}
+                    {age ? `, ${age}` : ''}
+                  </Text>
+                  <View style={[styles.onlineDot, { backgroundColor: isOnline(profile.last_seen_at) ? '#4ade80' : '#5a5a5e' }]} />
+                </View>
+                {profile.city && <Text style={styles.city}>{profile.city}</Text>}
+                {formatDistance(profile.distanceKm) && (
+                  <Text style={styles.distance}>{formatDistance(profile.distanceKm)}</Text>
+                )}
+                <Text style={styles.sobriety}>{SOBRIETY_LABEL[profile.sobriety_status]}</Text>
+                {profile.bio && <Text style={styles.bio}>{profile.bio}</Text>}
+              </View>
+            </TouchableOpacity>
 
             <View style={styles.actions}>
               <TouchableOpacity
@@ -286,6 +301,8 @@ const styles = StyleSheet.create({
   photoPlaceholderText: { color: '#9a9a9e' },
   cardBody: { padding: 14 },
   name: { fontSize: 18, fontWeight: '600', marginBottom: 4, color: '#f0f0f0' },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  onlineDot: { width: 9, height: 9, borderRadius: 5, marginBottom: 4 },
   city: { fontSize: 14, color: '#a0a0a5', marginBottom: 4 },
   distance: { fontSize: 13, color: '#a0a0a5', marginBottom: 4, fontStyle: 'italic' },
   sobriety: { fontSize: 13, color: '#3b82f6', fontWeight: '600', marginBottom: 8 },

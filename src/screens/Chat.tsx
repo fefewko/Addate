@@ -35,7 +35,7 @@ const REPORT_CATEGORIES: { value: string; label: string }[] = [
 export default function Chat() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { matchId, otherUserId, otherName } = route.params;
+  const { matchId, otherUserId, otherName, otherAge } = route.params;
   const insets = useSafeAreaInsets();
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -45,8 +45,9 @@ export default function Chat() {
   const listRef = useRef<FlatList>(null);
 
   useEffect(() => {
-    navigation.setOptions({ title: otherName || 'Чат' });
-  }, [navigation, otherName]);
+    const title = otherAge ? `${otherName || 'Чат'}, ${otherAge}` : otherName || 'Чат';
+    navigation.setOptions({ title });
+  }, [navigation, otherName, otherAge]);
 
   const loadMessages = useCallback(async () => {
     const {
@@ -67,6 +68,14 @@ export default function Chat() {
     }
 
     setMessages(data || []);
+
+    // Отмечаем чужие непрочитанные сообщения прочитанными — как только открыли чат
+    await supabase
+      .from('messages')
+      .update({ read_at: new Date().toISOString() })
+      .eq('match_id', matchId)
+      .neq('sender_id', user.id)
+      .is('read_at', null);
   }, [matchId]);
 
   useEffect(() => {

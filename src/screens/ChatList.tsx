@@ -16,17 +16,25 @@ type MatchRow = {
   user_a: string;
   user_b: string;
   matched_at: string | null;
-  user_a_profile: { display_name: string | null; photo_url: string | null } | null;
-  user_b_profile: { display_name: string | null; photo_url: string | null } | null;
+  user_a_profile: { display_name: string | null; photo_url: string | null; birth_date: string | null } | null;
+  user_b_profile: { display_name: string | null; photo_url: string | null; birth_date: string | null } | null;
 };
 
 type MatchItem = {
   matchId: string;
   otherUserId: string;
   otherName: string;
+  otherAge: number | null;
   otherPhoto: string | null;
   matchedAt: string | null;
+  hasUnread: boolean;
 };
+
+function calcAge(birthDate: string | null): number | null {
+  if (!birthDate) return null;
+  const diff = Date.now() - new Date(birthDate).getTime();
+  return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
+}
 
 export default function ChatList() {
   const navigation = useNavigation<any>();
@@ -45,32 +53,46 @@ export default function ChatList() {
       .from('matches')
       .select(
         `id, user_a, user_b, matched_at,
-         user_a_profile:profiles!matches_user_a_fkey (display_name, photo_url),
-         user_b_profile:profiles!matches_user_b_fkey (display_name, photo_url)`
+         user_a_profile:profiles!matches_user_a_fkey (display_name, photo_url, birth_date),
+         user_b_profile:profiles!matches_user_b_fkey (display_name, photo_url, birth_date)`
       )
       .eq('status', 'matched')
       .or(`user_a.eq.${user.id},user_b.eq.${user.id}`)
       .order('matched_at', { ascending: false });
 
-    setLoading(false);
-
     if (error) {
+      setLoading(false);
       console.warn('Ошибка загрузки совпадений:', error.message);
       return;
     }
 
-    const mapped: MatchItem[] = ((data as unknown as MatchRow[]) || []).map((m) => {
+    const rows = (data as unknown as MatchRow[]) || [];
+
+    // Непрочитанные сообщения по каждому совпадению — одним запросом,
+    // затем раскладываем по match_id на клиенте.
+    const { data: unreadRows } = await supabase
+      .from('messages')
+      .select('match_id')
+      .is('read_at', null)
+      .neq('sender_id', user.id);
+
+    const unreadMatchIds = new Set((unreadRows || []).map((m) => m.match_id));
+
+    const mapped: MatchItem[] = rows.map((m) => {
       const iAmUserA = m.user_a === user.id;
       const otherProfile = iAmUserA ? m.user_b_profile : m.user_a_profile;
       return {
         matchId: m.id,
         otherUserId: iAmUserA ? m.user_b : m.user_a,
         otherName: otherProfile?.display_name || 'Без имени',
+        otherAge: calcAge(otherProfile?.birth_date ?? null),
         otherPhoto: otherProfile?.photo_url || null,
         matchedAt: m.matched_at,
+        hasUnread: unreadMatchIds.has(m.id),
       };
     });
 
+    setLoading(false);
     setItems(mapped);
   }, []);
 
@@ -110,6 +132,7 @@ export default function ChatList() {
               matchId: item.matchId,
               otherUserId: item.otherUserId,
               otherName: item.otherName,
+              otherAge: item.otherAge,
             })
           }
         >
@@ -123,9 +146,15 @@ export default function ChatList() {
             </View>
           )}
           <View style={styles.rowBody}>
-            <Text style={styles.name}>{item.otherName}</Text>
-            <Text style={styles.hint}>Нажмите, чтобы открыть переписку</Text>
+            <Text style={styles.name}>
+              {item.otherName}
+              {item.otherAge ? `, ${item.otherAge}` : ''}
+            </Text>
+            <Text style={styles.hint}>
+              {item.hasUnread ? 'Новое сообщение' : 'Нажмите, чтобы открыть переписку'}
+            </Text>
           </View>
+          {item.hasUnread && <View style={styles.unreadDot} />}
         </TouchableOpacity>
       ))}
     </View>
@@ -150,4 +179,5 @@ const styles = StyleSheet.create({
   rowBody: { flex: 1 },
   name: { fontSize: 16, fontWeight: '600', color: '#f0f0f0' },
   hint: { fontSize: 13, color: '#9a9a9e', marginTop: 2 },
+  unreadDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#3b82f6', marginLeft: 8 },
 });

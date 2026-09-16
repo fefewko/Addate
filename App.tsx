@@ -1,7 +1,7 @@
 // App.tsx
 import 'react-native-url-polyfill/auto';
-import React, { useEffect, useState } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { View, ActivityIndicator, AppState } from 'react-native';
 import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -18,6 +18,7 @@ import AllUsers from './src/screens/AllUsers';
 import ChatList from './src/screens/ChatList';
 import Chat from './src/screens/Chat';
 import Profile from './src/screens/Profile';
+import ProfileDetail from './src/screens/ProfileDetail';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -29,7 +30,68 @@ const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   Profile: 'person-circle',
 };
 
+const HEARTBEAT_INTERVAL_MS = 45_000;
+
 function Tabs() {
+  const [unreadCount, setUnreadCount] = useState(0);
+  const heartbeatTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const sendHeartbeat = useCallback(async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    await supabase
+      .from('profiles')
+      .update({ last_seen_at: new Date().toISOString() })
+      .eq('id', user.id);
+  }, []);
+
+  const refreshUnreadCount = useCallback(async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
+    // RLS уже ограничивает видимые сообщения только моими совпадениями,
+    // так что достаточно отфильтровать непрочитанные не от меня.
+    const { count } = await supabase
+      .from('messages')
+      .select('id', { count: 'exact', head: true })
+      .is('read_at', null)
+      .neq('sender_id', user.id);
+
+    setUnreadCount(count || 0);
+  }, []);
+
+  useEffect(() => {
+    sendHeartbeat();
+    refreshUnreadCount();
+
+    heartbeatTimer.current = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
+
+    const appStateSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        sendHeartbeat();
+        refreshUnreadCount();
+      }
+    });
+
+    // Realtime: обновляем счётчик сразу при новом сообщении или отметке "прочитано"
+    const channel = supabase
+      .channel('unread-messages-watcher')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
+        refreshUnreadCount();
+      })
+      .subscribe();
+
+    return () => {
+      if (heartbeatTimer.current) clearInterval(heartbeatTimer.current);
+      appStateSub.remove();
+      supabase.removeChannel(channel);
+    };
+  }, [sendHeartbeat, refreshUnreadCount]);
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -55,7 +117,11 @@ function Tabs() {
     >
       <Tab.Screen name="Feed" component={Feed} options={{ title: 'Анкеты' }} />
       <Tab.Screen name="AllUsers" component={AllUsers} options={{ title: 'Все' }} />
-      <Tab.Screen name="ChatList" component={ChatList} options={{ title: 'Сообщения' }} />
+      <Tab.Screen
+        name="ChatList"
+        component={ChatList}
+        options={{ title: 'Сообщения', tabBarBadge: unreadCount > 0 ? unreadCount : undefined }}
+      />
       <Tab.Screen name="Profile" component={Profile} options={{ title: 'Профиль' }} />
     </Tab.Navigator>
   );
@@ -123,6 +189,11 @@ export default function App() {
           options={{ headerShown: false }}
         />
         <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
+        <Stack.Screen
+          name="ProfileDetail"
+          component={ProfileDetail}
+          options={{ title: 'Анкета', headerStyle: { backgroundColor: '#121212' }, headerTintColor: '#f0f0f0' }}
+        />
         <Stack.Screen name="Chat" component={Chat} options={{ title: 'Чат' }} />
       </Stack.Navigator>
     </NavigationContainer>
