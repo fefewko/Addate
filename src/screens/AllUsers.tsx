@@ -1,5 +1,5 @@
 // src/screens/AllUsers.tsx
-import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -11,10 +11,10 @@ import {
   ScrollView,
   Alert,
   Modal,
+  PanResponder,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import Slider from '@react-native-community/slider';
 import { supabase } from '../lib/supabase';
 
 type SobrietyStatus = 'trezv' | 'v_sryve' | 'ne_ukazano';
@@ -99,6 +99,127 @@ const DEFAULT_FILTERS: Filters = {
   substances: [],
   sobriety: 'any',
 };
+
+const AGE_MIN = 18;
+const AGE_MAX = 90;
+const THUMB_SIZE = 24;
+
+// Один слайдер с двумя бегунками для диапазона возраста.
+// Готовой библиотеки для range-слайдера в проекте нет — собран вручную на
+// PanResponder (встроен в React Native), чтобы не тянуть лишнюю зависимость.
+function AgeRangeSlider({
+  valueMin,
+  valueMax,
+  onChange,
+}: {
+  valueMin: number;
+  valueMax: number;
+  onChange: (min: number, max: number) => void;
+}) {
+  const [trackWidth, setTrackWidth] = useState(0);
+  const minValRef = useRef(valueMin);
+  const maxValRef = useRef(valueMax);
+  const startPos = useRef(0);
+
+  useEffect(() => {
+    minValRef.current = valueMin;
+    maxValRef.current = valueMax;
+  }, [valueMin, valueMax]);
+
+  const usableWidth = Math.max(trackWidth - THUMB_SIZE, 1);
+
+  function valueToPosition(value: number) {
+    return ((value - AGE_MIN) / (AGE_MAX - AGE_MIN)) * usableWidth;
+  }
+  function positionToValue(pos: number) {
+    const clamped = Math.max(0, Math.min(pos, usableWidth));
+    const raw = AGE_MIN + (clamped / usableWidth) * (AGE_MAX - AGE_MIN);
+    return Math.round(raw);
+  }
+
+  const minResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        startPos.current = valueToPosition(minValRef.current);
+      },
+      onPanResponderMove: (_evt, gesture) => {
+        let newVal = positionToValue(startPos.current + gesture.dx);
+        newVal = Math.min(newVal, maxValRef.current - 1);
+        if (newVal !== minValRef.current) {
+          minValRef.current = newVal;
+          onChange(newVal, maxValRef.current);
+        }
+      },
+    })
+  ).current;
+
+  const maxResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        startPos.current = valueToPosition(maxValRef.current);
+      },
+      onPanResponderMove: (_evt, gesture) => {
+        let newVal = positionToValue(startPos.current + gesture.dx);
+        newVal = Math.max(newVal, minValRef.current + 1);
+        if (newVal !== maxValRef.current) {
+          maxValRef.current = newVal;
+          onChange(minValRef.current, newVal);
+        }
+      },
+    })
+  ).current;
+
+  const minPos = valueToPosition(valueMin);
+  const maxPos = valueToPosition(valueMax);
+
+  return (
+    <View
+      style={sliderStyles.track}
+      onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
+    >
+      <View style={sliderStyles.rail} />
+      {trackWidth > 0 && (
+        <>
+          <View
+            style={[
+              sliderStyles.fill,
+              { left: minPos + THUMB_SIZE / 2, width: Math.max(maxPos - minPos, 0) },
+            ]}
+          />
+          <View
+            {...minResponder.panHandlers}
+            style={[sliderStyles.thumb, { left: minPos }]}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          />
+          <View
+            {...maxResponder.panHandlers}
+            style={[sliderStyles.thumb, { left: maxPos }]}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          />
+        </>
+      )}
+    </View>
+  );
+}
+
+const sliderStyles = StyleSheet.create({
+  track: { height: THUMB_SIZE, justifyContent: 'center', marginTop: 8, marginBottom: 4 },
+  rail: { position: 'absolute', left: 0, right: 0, height: 4, borderRadius: 2, backgroundColor: '#2a2a2a' },
+  fill: { position: 'absolute', height: 4, borderRadius: 2, backgroundColor: '#3b82f6' },
+  thumb: {
+    position: 'absolute',
+    width: THUMB_SIZE,
+    height: THUMB_SIZE,
+    borderRadius: THUMB_SIZE / 2,
+    backgroundColor: '#3b82f6',
+    borderWidth: 2,
+    borderColor: '#f0f0f0',
+  },
+});
 
 export default function AllUsers() {
   const navigation = useNavigation<any>();
@@ -428,31 +549,10 @@ export default function AllUsers() {
               <Text style={styles.filterLabel}>
                 Возраст: {draftFilters.ageMin} – {draftFilters.ageMax}
               </Text>
-              <Text style={styles.sliderCaption}>От</Text>
-              <Slider
-                minimumValue={18}
-                maximumValue={90}
-                step={1}
-                value={draftFilters.ageMin}
-                onValueChange={(v) =>
-                  setDraftFilters((p) => ({ ...p, ageMin: Math.min(v, p.ageMax) }))
-                }
-                minimumTrackTintColor="#3b82f6"
-                maximumTrackTintColor="#2a2a2a"
-                thumbTintColor="#3b82f6"
-              />
-              <Text style={styles.sliderCaption}>До</Text>
-              <Slider
-                minimumValue={18}
-                maximumValue={90}
-                step={1}
-                value={draftFilters.ageMax}
-                onValueChange={(v) =>
-                  setDraftFilters((p) => ({ ...p, ageMax: Math.max(v, p.ageMin) }))
-                }
-                minimumTrackTintColor="#3b82f6"
-                maximumTrackTintColor="#2a2a2a"
-                thumbTintColor="#3b82f6"
+              <AgeRangeSlider
+                valueMin={draftFilters.ageMin}
+                valueMax={draftFilters.ageMax}
+                onChange={(min, max) => setDraftFilters((p) => ({ ...p, ageMin: min, ageMax: max }))}
               />
 
               <Text style={styles.filterLabel}>Расстояние</Text>
@@ -555,7 +655,6 @@ const styles = StyleSheet.create({
   modalContent: { padding: 20, paddingBottom: 40 },
   modalTitle: { fontSize: 20, fontWeight: '700', color: '#f0f0f0', marginBottom: 16 },
   filterLabel: { fontSize: 14, fontWeight: '600', color: '#f0f0f0', marginTop: 18, marginBottom: 8 },
-  sliderCaption: { fontSize: 12, color: '#8a8a8e', marginBottom: -4 },
   cityInput: {
     backgroundColor: '#1c1c1e',
     color: '#f0f0f0',
