@@ -10,11 +10,15 @@ import {
   ActivityIndicator,
   StyleSheet,
   Alert,
+  Modal,
+  Dimensions,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '../lib/supabase';
+
+const screenWidth = Dimensions.get('window').width;
 
 type SobrietyStatus = 'trezv' | 'v_sryve' | 'ne_ukazano';
 
@@ -52,6 +56,8 @@ export default function Profile() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
   const [original, setOriginal] = useState<{
     city: string;
     heightCm: string;
@@ -275,6 +281,7 @@ export default function Profile() {
   }
 
   return (
+    <>
     <ScrollView contentContainerStyle={styles.container}>
       <TouchableOpacity style={styles.photoPicker} onPress={handleChangeMainPhoto} disabled={uploadingPhoto}>
         {photoUrl ? (
@@ -289,8 +296,19 @@ export default function Profile() {
             <ActivityIndicator color="#fff" />
           </View>
         )}
+        {photoUrl && !uploadingPhoto && (
+          <TouchableOpacity
+            style={styles.viewPhotoButton}
+            onPress={() => {
+              setViewerIndex(0);
+              setViewerVisible(true);
+            }}
+          >
+            <Ionicons name="eye" size={16} color="#fff" />
+          </TouchableOpacity>
+        )}
       </TouchableOpacity>
-      <Text style={styles.changePhotoHint}>Нажмите на фото, чтобы изменить</Text>
+      <Text style={styles.changePhotoHint}>Нажмите на фото, чтобы изменить, на значок глаза — чтобы посмотреть</Text>
 
       <Text style={styles.label}>Email</Text>
       <View style={styles.readOnlyField}>
@@ -375,7 +393,15 @@ export default function Profile() {
       </Text>
       <View style={styles.photosGrid}>
         {additionalPhotos.map((url) => (
-          <TouchableOpacity key={url} onLongPress={() => handleRemovePhoto(url)}>
+          <TouchableOpacity
+            key={url}
+            onPress={() => {
+              const combined = [photoUrl, ...additionalPhotos].filter((p): p is string => !!p);
+              setViewerIndex(combined.indexOf(url));
+              setViewerVisible(true);
+            }}
+            onLongPress={() => handleRemovePhoto(url)}
+          >
             <Image source={{ uri: url }} style={styles.thumb} />
           </TouchableOpacity>
         ))}
@@ -405,6 +431,71 @@ export default function Profile() {
         <Text style={styles.signOutButtonText}>Выйти из аккаунта</Text>
       </TouchableOpacity>
     </ScrollView>
+
+    <PhotoViewerModal
+      visible={viewerVisible}
+      photos={[photoUrl, ...additionalPhotos].filter((p): p is string => !!p)}
+      startIndex={viewerIndex}
+      onClose={() => setViewerVisible(false)}
+    />
+    </>
+  );
+}
+
+function PhotoViewerModal({
+  visible,
+  photos,
+  startIndex,
+  onClose,
+}: {
+  visible: boolean;
+  photos: string[];
+  startIndex: number;
+  onClose: () => void;
+}) {
+  const scrollRef = React.useRef<ScrollView>(null);
+  const [currentIndex, setCurrentIndex] = React.useState(startIndex);
+
+  React.useEffect(() => {
+    if (visible) {
+      setCurrentIndex(startIndex);
+      setTimeout(() => {
+        scrollRef.current?.scrollTo({ x: startIndex * screenWidth, animated: false });
+      }, 50);
+    }
+  }, [visible, startIndex]);
+
+  if (photos.length === 0) return null;
+
+  return (
+    <Modal visible={visible} animationType="fade" transparent={false} onRequestClose={onClose}>
+      <View style={styles.viewerContainer}>
+        <TouchableOpacity style={styles.viewerClose} onPress={onClose}>
+          <Ionicons name="close" size={30} color="#fff" />
+        </TouchableOpacity>
+        <ScrollView
+          ref={scrollRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={(e) => {
+            const page = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
+            setCurrentIndex(page);
+          }}
+        >
+          {photos.map((url, i) => (
+            <View key={i} style={{ width: screenWidth, justifyContent: 'center', alignItems: 'center' }}>
+              <Image source={{ uri: url }} style={styles.viewerImage} resizeMode="contain" />
+            </View>
+          ))}
+        </ScrollView>
+        {photos.length > 1 && (
+          <Text style={styles.viewerCounter}>
+            {currentIndex + 1} / {photos.length}
+          </Text>
+        )}
+      </View>
+    </Modal>
   );
 }
 
@@ -429,6 +520,42 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  viewPhotoButton: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewerContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center' },
+  viewerClose: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewerImage: { width: screenWidth, height: '100%' },
+  viewerCounter: {
+    position: 'absolute',
+    bottom: 40,
+    alignSelf: 'center',
+    color: '#fff',
+    fontSize: 14,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
   },
   changePhotoHint: { textAlign: 'center', color: '#8a8a8e', fontSize: 12, marginTop: 8, marginBottom: 20 },
   label: { fontSize: 13, fontWeight: '600', color: '#a0a0a5', marginBottom: 6, marginLeft: 2 },
