@@ -13,6 +13,7 @@ import {
   ActionSheetIOS,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
 
 type Message = {
@@ -35,6 +36,7 @@ export default function Chat() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { matchId, otherUserId, otherName } = route.params;
+  const insets = useSafeAreaInsets();
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
@@ -183,7 +185,7 @@ export default function Chat() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={90}
     >
       <View style={styles.header}>
@@ -213,7 +215,7 @@ export default function Chat() {
         }}
       />
 
-      <View style={styles.inputRow}>
+      <View style={[styles.inputRow, { paddingBottom: Math.max(insets.bottom, 10) }]}>
         <TextInput
           style={styles.input}
         placeholderTextColor="#8a8a8e"
