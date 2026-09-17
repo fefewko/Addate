@@ -6,6 +6,9 @@ import {
   TextInput,
   TouchableOpacity,
   FlatList,
+  Image,
+  Modal,
+  ActivityIndicator,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
@@ -14,13 +17,17 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '../lib/supabase';
+import { uploadChatImage, getSignedChatImageUrls } from '../lib/chatImages';
 
 type Message = {
   id: string;
   match_id: string;
   sender_id: string;
-  content: string;
+  content: string | null;
+  image_path: string | null;
   created_at: string;
 };
 
@@ -39,9 +46,12 @@ export default function Chat() {
   const insets = useSafeAreaInsets();
 
   const [messages, setMessages] = useState<Message[]>([]);
+  const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [text, setText] = useState('');
   const [myId, setMyId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const listRef = useRef<FlatList>(null);
 
   useEffect(() => {
@@ -67,7 +77,14 @@ export default function Chat() {
       return;
     }
 
-    setMessages(data || []);
+    const loaded = data || [];
+    setMessages(loaded);
+
+    const paths = loaded.map((m) => m.image_path).filter((p): p is string => !!p);
+    if (paths.length > 0) {
+      const urls = await getSignedChatImageUrls(paths);
+      setImageUrls((prev) => ({ ...prev, ...urls }));
+    }
 
     // Отмечаем чужие непрочитанные сообщения прочитанными — как только открыли чат
     await supabase
@@ -89,8 +106,13 @@ export default function Chat() {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `match_id=eq.${matchId}` },
-        (payload) => {
-          setMessages((prev) => [...prev, payload.new as Message]);
+        async (payload) => {
+          const newMessage = payload.new as Message;
+          setMessages((prev) => [...prev, newMessage]);
+          if (newMessage.image_path) {
+            const urls = await getSignedChatImageUrls([newMessage.image_path]);
+            setImageUrls((prev) => ({ ...prev, ...urls }));
+          }
         }
       )
       .subscribe();
@@ -119,6 +141,37 @@ export default function Chat() {
       Alert.alert('Ошибка', 'Не удалось отправить сообщение.');
       setText(content); // возвращаем текст в поле, чтобы не потерять
     }
+  }
+
+  async function handlePickImage() {
+    if (!myId || uploadingImage) return;
+
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Нужен доступ', 'Разрешите доступ к галерее, чтобы отправить фото.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.6,
+    });
+
+    if (result.canceled || !result.assets?.[0]?.uri) return;
+
+    setUploadingImage(true);
+    try {
+      const path = await uploadChatImage(matchId, result.assets[0].uri);
+      const { error } = await supabase.from('messages').insert({
+        match_id: matchId,
+        sender_id: myId,
+        image_path: path,
+      });
+      if (error) throw new Error(error.message);
+    } catch (e: any) {
+      Alert.alert('Ошибка', 'Не удалось отправить фото: ' + e.message);
+    }
+    setUploadingImage(false);
   }
 
   async function handleBlock() {
@@ -214,6 +267,24 @@ export default function Chat() {
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
         renderItem={({ item }) => {
           const isMine = item.sender_id === myId;
+
+          if (item.image_path) {
+            const url = imageUrls[item.image_path];
+            return (
+              <View style={[styles.bubble, styles.imageBubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}>
+                {url ? (
+                  <TouchableOpacity onPress={() => setPreviewUrl(url)}>
+                    <Image source={{ uri: url }} style={styles.chatImage} />
+                  </TouchableOpacity>
+                ) : (
+                  <View style={[styles.chatImage, styles.chatImageLoading]}>
+                    <ActivityIndicator color="#fff" />
+                  </View>
+                )}
+              </View>
+            );
+          }
+
           return (
             <View style={[styles.bubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}>
               <Text style={isMine ? styles.bubbleTextMine : styles.bubbleTextTheirs}>
@@ -225,9 +296,16 @@ export default function Chat() {
       />
 
       <View style={[styles.inputRow, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+        <TouchableOpacity style={styles.attachButton} onPress={handlePickImage} disabled={uploadingImage}>
+          {uploadingImage ? (
+            <ActivityIndicator color="#8a8a8e" size="small" />
+          ) : (
+            <Ionicons name="image-outline" size={24} color="#8a8a8e" />
+          )}
+        </TouchableOpacity>
         <TextInput
           style={styles.input}
-        placeholderTextColor="#8a8a8e"
+          placeholderTextColor="#8a8a8e"
           placeholder="Сообщение..."
           value={text}
           onChangeText={setText}
@@ -241,6 +319,17 @@ export default function Chat() {
           <Text style={styles.sendButtonText}>Отправить</Text>
         </TouchableOpacity>
       </View>
+
+      <Modal visible={!!previewUrl} transparent animationType="fade" onRequestClose={() => setPreviewUrl(null)}>
+        <View style={styles.previewOverlay}>
+          <TouchableOpacity style={styles.previewClose} onPress={() => setPreviewUrl(null)}>
+            <Ionicons name="close" size={30} color="#fff" />
+          </TouchableOpacity>
+          {previewUrl && (
+            <Image source={{ uri: previewUrl }} style={styles.previewImage} resizeMode="contain" />
+          )}
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -259,10 +348,13 @@ const styles = StyleSheet.create({
   blockText: { color: '#f87171' },
   messageList: { padding: 14, flexGrow: 1 },
   bubble: { maxWidth: '78%', borderRadius: 14, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 8 },
+  imageBubble: { padding: 4 },
   bubbleMine: { backgroundColor: '#3b82f6', alignSelf: 'flex-end' },
   bubbleTheirs: { backgroundColor: '#2a2a2a', alignSelf: 'flex-start' },
   bubbleTextMine: { color: '#fff', fontSize: 15 },
   bubbleTextTheirs: { color: '#f0f0f0', fontSize: 15 },
+  chatImage: { width: 200, height: 200, borderRadius: 10, backgroundColor: '#1c1c1e' },
+  chatImageLoading: { alignItems: 'center', justifyContent: 'center' },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -270,6 +362,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#2a2a2a',
   },
+  attachButton: { padding: 8, marginRight: 4, marginBottom: 2 },
   input: {
     backgroundColor: '#1c1c1e',
     color: '#f0f0f0',
@@ -286,4 +379,18 @@ const styles = StyleSheet.create({
   sendButton: { backgroundColor: '#3b82f6', borderRadius: 18, paddingHorizontal: 16, paddingVertical: 10 },
   sendButtonDisabled: { opacity: 0.5 },
   sendButtonText: { color: '#fff', fontWeight: '600' },
+  previewOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center' },
+  previewClose: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewImage: { width: '100%', height: '80%' },
 });

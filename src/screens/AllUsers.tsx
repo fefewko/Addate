@@ -19,6 +19,8 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import * as ImagePicker from 'expo-image-picker';
+import { uploadChatImage, getSignedChatImageUrls } from '../lib/chatImages';
 import { supabase } from '../lib/supabase';
 
 type SobrietyStatus = 'trezv' | 'v_sryve' | 'ne_ukazano';
@@ -225,7 +227,7 @@ const sliderStyles = StyleSheet.create({
   },
 });
 
-type Message = { id: string; match_id: string; sender_id: string; content: string; created_at: string };
+type Message = { id: string; match_id: string; sender_id: string; content: string | null; image_path: string | null; created_at: string };
 
 // Компактный чат прямо во всплывающем окне — чтобы можно было ответить
 // человеку, не покидая вкладку "Все" и не переходя в "Сообщения".
@@ -244,8 +246,11 @@ function QuickChatModal({
 }) {
   const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<Message[]>([]);
+  const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [loading, setLoading] = useState(true);
   const listRef = useRef<FlatList>(null);
 
@@ -262,9 +267,16 @@ function QuickChatModal({
         .eq('match_id', matchId)
         .order('created_at', { ascending: true });
 
+      const loaded = data || [];
       if (active) {
-        setMessages(data || []);
+        setMessages(loaded);
         setLoading(false);
+      }
+
+      const paths = loaded.map((m) => m.image_path).filter((p): p is string => !!p);
+      if (paths.length > 0) {
+        const urls = await getSignedChatImageUrls(paths);
+        if (active) setImageUrls((prev) => ({ ...prev, ...urls }));
       }
 
       await supabase
@@ -281,8 +293,13 @@ function QuickChatModal({
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `match_id=eq.${matchId}` },
-        (payload) => {
-          setMessages((prev) => [...prev, payload.new as Message]);
+        async (payload) => {
+          const newMessage = payload.new as Message;
+          setMessages((prev) => [...prev, newMessage]);
+          if (newMessage.image_path) {
+            const urls = await getSignedChatImageUrls([newMessage.image_path]);
+            setImageUrls((prev) => ({ ...prev, ...urls }));
+          }
         }
       )
       .subscribe();
@@ -305,6 +322,33 @@ function QuickChatModal({
       Alert.alert('Ошибка', 'Не удалось отправить сообщение.');
       setText(content);
     }
+  }
+
+  async function handlePickImage() {
+    if (!myId || !matchId || uploadingImage) return;
+
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Нужен доступ', 'Разрешите доступ к галерее, чтобы отправить фото.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.6,
+    });
+
+    if (result.canceled || !result.assets?.[0]?.uri) return;
+
+    setUploadingImage(true);
+    try {
+      const path = await uploadChatImage(matchId, result.assets[0].uri);
+      const { error } = await supabase.from('messages').insert({ match_id: matchId, sender_id: myId, image_path: path });
+      if (error) throw new Error(error.message);
+    } catch (e: any) {
+      Alert.alert('Ошибка', 'Не удалось отправить фото: ' + e.message);
+    }
+    setUploadingImage(false);
   }
 
   return (
@@ -333,6 +377,24 @@ function QuickChatModal({
             onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
             renderItem={({ item }) => {
               const isMine = item.sender_id === myId;
+
+              if (item.image_path) {
+                const url = imageUrls[item.image_path];
+                return (
+                  <View style={[styles.bubble, styles.imageBubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}>
+                    {url ? (
+                      <TouchableOpacity onPress={() => setPreviewUrl(url)}>
+                        <Image source={{ uri: url }} style={styles.chatImage} />
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={[styles.chatImage, styles.chatImageLoading]}>
+                        <ActivityIndicator color="#fff" />
+                      </View>
+                    )}
+                  </View>
+                );
+              }
+
               return (
                 <View style={[styles.bubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}>
                   <Text style={isMine ? styles.bubbleTextMine : styles.bubbleTextTheirs}>{item.content}</Text>
@@ -343,6 +405,13 @@ function QuickChatModal({
         )}
 
         <View style={[styles.quickChatInputRow, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+          <TouchableOpacity style={styles.attachButton} onPress={handlePickImage} disabled={uploadingImage}>
+            {uploadingImage ? (
+              <ActivityIndicator color="#8a8a8e" size="small" />
+            ) : (
+              <Ionicons name="image-outline" size={24} color="#8a8a8e" />
+            )}
+          </TouchableOpacity>
           <TextInput
             style={styles.quickChatInput}
             placeholder="Сообщение..."
@@ -360,6 +429,15 @@ function QuickChatModal({
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      <Modal visible={!!previewUrl} transparent animationType="fade" onRequestClose={() => setPreviewUrl(null)}>
+        <View style={styles.previewOverlay}>
+          <TouchableOpacity style={styles.previewClose} onPress={() => setPreviewUrl(null)}>
+            <Ionicons name="close" size={30} color="#fff" />
+          </TouchableOpacity>
+          {previewUrl && <Image source={{ uri: previewUrl }} style={styles.previewImage} resizeMode="contain" />}
+        </View>
+      </Modal>
     </Modal>
   );
 }
@@ -894,4 +972,22 @@ const styles = StyleSheet.create({
   quickChatSend: { backgroundColor: '#3b82f6', borderRadius: 18, paddingHorizontal: 16, paddingVertical: 10 },
   quickChatSendText: { color: '#fff', fontWeight: '600' },
   buttonDisabledOpacity: { opacity: 0.5 },
+  imageBubble: { padding: 4 },
+  chatImage: { width: 200, height: 200, borderRadius: 10, backgroundColor: '#1c1c1e' },
+  chatImageLoading: { alignItems: 'center', justifyContent: 'center' },
+  attachButton: { padding: 8, marginRight: 4, marginBottom: 2 },
+  previewOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center' },
+  previewClose: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewImage: { width: '100%', height: '80%' },
 });
