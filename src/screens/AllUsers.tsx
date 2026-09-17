@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadChatImage, getSignedChatImageUrls } from '../lib/chatImages';
+import { likeProfile } from '../lib/matches';
 import { supabase } from '../lib/supabase';
 
 type SobrietyStatus = 'trezv' | 'v_sryve' | 'ne_ukazano';
@@ -557,39 +558,24 @@ export default function AllUsers() {
     if (!myId || matchMap.has(target.id)) return;
     setBusyId(target.id);
 
-    const { data: reverseMatch } = await supabase
-      .from('matches')
-      .select('id, status')
-      .eq('user_a', target.id)
-      .eq('user_b', myId)
-      .maybeSingle();
+    const result = await likeProfile(myId, target.id);
+    setBusyId(null);
 
-    if (reverseMatch && reverseMatch.status === 'pending') {
-      await supabase
-        .from('matches')
-        .update({ status: 'matched', matched_at: new Date().toISOString() })
-        .eq('id', reverseMatch.id);
-
-      setMatchMap((prev) => new Map(prev).set(target.id, { matchId: reverseMatch.id, status: 'matched' }));
-      setBusyId(null);
+    if (result.matched) {
+      setMatchMap((prev) => new Map(prev).set(target.id, { matchId: result.matchId, status: 'matched' }));
       Alert.alert('Это совпадение! 🎉', `Вы с ${target.display_name || 'этим человеком'} понравились друг другу.`, [
         {
           text: 'Написать сообщение',
-          onPress: () => setQuickChat({ matchId: reverseMatch.id, otherName: target.display_name }),
+          onPress: () => setQuickChat({ matchId: result.matchId, otherName: target.display_name }),
         },
         { text: 'Продолжить', style: 'cancel' },
       ]);
       return;
     }
 
-    const { data: inserted } = await supabase
-      .from('matches')
-      .insert({ user_a: myId, user_b: target.id, status: 'pending' })
-      .select('id')
-      .single();
-
-    setMatchMap((prev) => new Map(prev).set(target.id, { matchId: inserted?.id || '', status: 'pending' }));
-    setBusyId(null);
+    if (result.matchId) {
+      setMatchMap((prev) => new Map(prev).set(target.id, { matchId: result.matchId as string, status: 'pending' }));
+    }
   }
 
   function toggleDraftSubstance(value: string) {

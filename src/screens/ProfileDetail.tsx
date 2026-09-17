@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
+import { likeProfile } from '../lib/matches';
 
 const SOBRIETY_LABEL: Record<string, string> = {
   trezv: 'Чист(а)',
@@ -126,27 +127,18 @@ export default function ProfileDetail() {
     if (!myId || !profile || matchInfo) return;
     setLiking(true);
 
-    const { data: reverseMatch } = await supabase
-      .from('matches')
-      .select('id, status')
-      .eq('user_a', profile.id)
-      .eq('user_b', myId)
-      .maybeSingle();
+    const result = await likeProfile(myId, profile.id);
+    setLiking(false);
 
-    if (reverseMatch && reverseMatch.status === 'pending') {
-      await supabase
-        .from('matches')
-        .update({ status: 'matched', matched_at: new Date().toISOString() })
-        .eq('id', reverseMatch.id);
-      setLiking(false);
-      setMatchInfo({ matchId: reverseMatch.id, status: 'matched' });
+    if (result.matched) {
+      setMatchInfo({ matchId: result.matchId, status: 'matched' });
       const age = calcAge(profile.birth_date);
       Alert.alert('Это совпадение! 🎉', `Вы с ${profile.display_name || 'этим человеком'} понравились друг другу.`, [
         {
           text: 'Написать сообщение',
           onPress: () =>
             navigation.navigate('Chat', {
-              matchId: reverseMatch.id,
+              matchId: result.matchId,
               otherUserId: profile.id,
               otherName: profile.display_name,
               otherAge: age,
@@ -157,13 +149,9 @@ export default function ProfileDetail() {
       return;
     }
 
-    const { data: inserted } = await supabase
-      .from('matches')
-      .insert({ user_a: myId, user_b: profile.id, status: 'pending' })
-      .select('id')
-      .single();
-    setLiking(false);
-    setMatchInfo({ matchId: inserted?.id || '', status: 'pending' });
+    if (result.matchId) {
+      setMatchInfo({ matchId: result.matchId, status: 'pending' });
+    }
   }
 
   if (loading) {

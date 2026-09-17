@@ -2,12 +2,14 @@
 import 'react-native-url-polyfill/auto';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, ActivityIndicator, AppState } from 'react-native';
-import { NavigationContainer, DarkTheme } from '@react-navigation/native';
+import { NavigationContainer, DarkTheme, useNavigation } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import * as Notifications from 'expo-notifications';
 
 import { supabase } from './src/lib/supabase';
+import { registerForPushNotifications } from './src/lib/pushNotifications';
 
 import SignIn from './src/screens/SignIn';
 import SignUp from './src/screens/SignUp';
@@ -34,6 +36,7 @@ const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
 const HEARTBEAT_INTERVAL_MS = 45_000;
 
 function Tabs() {
+  const navigation = useNavigation<any>();
   const [unreadCount, setUnreadCount] = useState(0);
   const heartbeatTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -68,6 +71,7 @@ function Tabs() {
   useEffect(() => {
     sendHeartbeat();
     refreshUnreadCount();
+    registerForPushNotifications();
 
     heartbeatTimer.current = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
 
@@ -86,12 +90,22 @@ function Tabs() {
       })
       .subscribe();
 
+    // Тап по push-уведомлению о новом сообщении — сразу открываем список чатов
+    // (полные данные о собеседнике подтянутся уже там, у нас есть только matchId)
+    const notificationSub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const matchId = response.notification.request.content.data?.matchId;
+      if (matchId) {
+        navigation.navigate('ChatList');
+      }
+    });
+
     return () => {
       if (heartbeatTimer.current) clearInterval(heartbeatTimer.current);
       appStateSub.remove();
       supabase.removeChannel(channel);
+      notificationSub.remove();
     };
-  }, [sendHeartbeat, refreshUnreadCount]);
+  }, [sendHeartbeat, refreshUnreadCount, navigation]);
 
   return (
     <Tab.Navigator

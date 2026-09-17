@@ -37,6 +37,12 @@
         }
       ],
       [
+        "expo-notifications",
+        {
+          "color": "#3b82f6"
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#121212",
