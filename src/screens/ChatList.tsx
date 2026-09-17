@@ -1,5 +1,5 @@
 // src/screens/ChatList.tsx
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -101,6 +101,21 @@ export default function ChatList() {
       loadMatches();
     }, [loadMatches])
   );
+
+  // Пока экран открыт, обновляем список сразу при новом сообщении или
+  // отметке "прочитано" — иначе не увидим новое сообщение, не выходя с экрана.
+  useEffect(() => {
+    const channel = supabase
+      .channel('chatlist-messages-watcher')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
+        loadMatches();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [loadMatches]);
 
   if (loading) {
     return (
