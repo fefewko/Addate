@@ -220,67 +220,64 @@ export default function Feed() {
     );
   }
 
+  const current = profiles[0];
+  const age = calcAge(current.birth_date);
+  const busy = actingOnId === current.id;
+
   return (
-    <ScrollView contentContainerStyle={styles.list}>
-      {profiles.map((profile) => {
-        const age = calcAge(profile.birth_date);
-        const busy = actingOnId === profile.id;
-
-        return (
-          <View key={profile.id} style={styles.card}>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => navigation.navigate('ProfileDetail', { profileId: profile.id })}
-            >
-              {profile.photo_url ? (
-                <Image source={{ uri: profile.photo_url }} style={styles.photo} />
-              ) : (
-                <View style={[styles.photo, styles.photoPlaceholder]}>
-                  <Text style={styles.photoPlaceholderText}>Нет фото</Text>
-                </View>
-              )}
-
-              <View style={styles.cardBody}>
-                <View style={styles.nameRow}>
-                  <Text style={styles.name}>
-                    {profile.display_name || 'Без имени'}
-                    {age ? `, ${age}` : ''}
-                  </Text>
-                  <View style={[styles.onlineDot, { backgroundColor: isOnline(profile.last_seen_at) ? '#4ade80' : '#5a5a5e' }]} />
-                </View>
-                {profile.city && <Text style={styles.city}>{profile.city}</Text>}
-                {formatDistance(profile.distanceKm) && (
-                  <Text style={styles.distance}>{formatDistance(profile.distanceKm)}</Text>
-                )}
-                <Text style={styles.sobriety}>{SOBRIETY_LABEL[profile.sobriety_status]}</Text>
-                {profile.bio && <Text style={styles.bio}>{profile.bio}</Text>}
-              </View>
-            </TouchableOpacity>
-
-            <View style={styles.actions}>
-              <TouchableOpacity
-                style={styles.skipButton}
-                onPress={() => handleAction(profile, 'skip')}
-                disabled={busy}
-              >
-                <Text style={styles.skipButtonText}>Пропустить</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.likeButton}
-                onPress={() => handleAction(profile, 'like')}
-                disabled={busy}
-              >
-                {busy ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <Text style={styles.likeButtonText}>Нравится</Text>
-                )}
-              </TouchableOpacity>
-            </View>
+    <View style={styles.container}>
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={() => navigation.navigate('ProfileDetail', { profileId: current.id })}
+      >
+        {current.photo_url ? (
+          <Image source={{ uri: current.photo_url }} style={styles.photo} />
+        ) : (
+          <View style={[styles.photo, styles.photoPlaceholder]}>
+            <Text style={styles.photoPlaceholderText}>Нет фото</Text>
           </View>
-        );
-      })}
-    </ScrollView>
+        )}
+      </TouchableOpacity>
+
+      <ScrollView style={styles.infoScroll} contentContainerStyle={styles.infoContent}>
+        <View style={styles.nameRow}>
+          <Text style={styles.name}>
+            {current.display_name || 'Без имени'}
+            {age ? `, ${age}` : ''}
+          </Text>
+          <View
+            style={[styles.onlineDot, { backgroundColor: isOnline(current.last_seen_at) ? '#4ade80' : '#5a5a5e' }]}
+          />
+        </View>
+        {current.city && <Text style={styles.city}>{current.city}</Text>}
+        {formatDistance(current.distanceKm) && (
+          <Text style={styles.distance}>{formatDistance(current.distanceKm)}</Text>
+        )}
+        <Text style={styles.sobriety}>{SOBRIETY_LABEL[current.sobriety_status]}</Text>
+        {current.bio && <Text style={styles.bio}>{current.bio}</Text>}
+      </ScrollView>
+
+      <View style={styles.actions}>
+        <TouchableOpacity
+          style={styles.skipButton}
+          onPress={() => handleAction(current, 'skip')}
+          disabled={busy}
+        >
+          <Text style={styles.skipButtonText}>Пропустить</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.likeButton}
+          onPress={() => handleAction(current, 'like')}
+          disabled={busy}
+        >
+          {busy ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <Text style={styles.likeButtonText}>Нравится</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
@@ -290,28 +287,22 @@ const styles = StyleSheet.create({
   emptyBody: { fontSize: 14, color: '#a0a0a5', textAlign: 'center', marginBottom: 20 },
   refreshButton: { backgroundColor: '#3b82f6', borderRadius: 8, paddingVertical: 12, paddingHorizontal: 24 },
   refreshButtonText: { color: '#fff', fontWeight: '600' },
-  list: { padding: 16, backgroundColor: '#121212' },
-  card: {
-    borderWidth: 1,
-    borderColor: '#2a2a2a',
-    borderRadius: 12,
-    marginBottom: 16,
-    overflow: 'hidden',
-  },
-  photo: { width: '100%', height: 260, backgroundColor: '#2a2a2a' },
+  container: { flex: 1, backgroundColor: '#121212' },
+  photo: { width: '100%', height: 380, backgroundColor: '#2a2a2a' },
   photoPlaceholder: { alignItems: 'center', justifyContent: 'center' },
   photoPlaceholderText: { color: '#9a9a9e' },
-  cardBody: { padding: 14 },
-  name: { fontSize: 18, fontWeight: '600', marginBottom: 4, color: '#f0f0f0' },
+  infoScroll: { flex: 1 },
+  infoContent: { padding: 16 },
+  name: { fontSize: 20, fontWeight: '700', marginBottom: 4, color: '#f0f0f0' },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   onlineDot: { width: 9, height: 9, borderRadius: 5, marginBottom: 4 },
-  city: { fontSize: 14, color: '#a0a0a5', marginBottom: 4 },
+  city: { fontSize: 15, color: '#a0a0a5', marginBottom: 4 },
   distance: { fontSize: 13, color: '#a0a0a5', marginBottom: 4, fontStyle: 'italic' },
-  sobriety: { fontSize: 13, color: '#3b82f6', fontWeight: '600', marginBottom: 8 },
-  bio: { fontSize: 14, color: '#f0f0f0', lineHeight: 20 },
+  sobriety: { fontSize: 14, color: '#3b82f6', fontWeight: '600', marginBottom: 10 },
+  bio: { fontSize: 15, color: '#f0f0f0', lineHeight: 21 },
   actions: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#2a2a2a' },
-  skipButton: { flex: 1, padding: 14, alignItems: 'center', borderRightWidth: 1, borderRightColor: '#2a2a2a' },
-  skipButtonText: { color: '#a0a0a5', fontWeight: '600' },
-  likeButton: { flex: 1, padding: 14, alignItems: 'center', backgroundColor: '#3b82f6' },
-  likeButtonText: { color: '#fff', fontWeight: '600' },
+  skipButton: { flex: 1, padding: 16, alignItems: 'center', borderRightWidth: 1, borderRightColor: '#2a2a2a' },
+  skipButtonText: { color: '#a0a0a5', fontWeight: '600', fontSize: 16 },
+  likeButton: { flex: 1, padding: 16, alignItems: 'center', backgroundColor: '#3b82f6' },
+  likeButtonText: { color: '#fff', fontWeight: '600', fontSize: 16 },
 });
