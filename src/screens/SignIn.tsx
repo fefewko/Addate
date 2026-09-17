@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
+import { loginWithTelegram } from '../lib/telegramAuth';
 
 function mapAuthError(message: string): string {
   if (message.includes('Invalid login credentials')) {
@@ -30,7 +31,34 @@ export default function SignIn() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [telegramLoading, setTelegramLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Общая логика для email- и Telegram-входа: смотрим, заполнена ли анкета
+  // и прошла ли она модерацию, и ведём на нужный экран.
+  async function routeAfterLogin(userId: string) {
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('moderation_status, display_name')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (profileError) {
+      setError('Не удалось загрузить профиль. Попробуйте ещё раз.');
+      return;
+    }
+
+    if (!profile || !profile.display_name) {
+      navigation.reset({ index: 0, routes: [{ name: 'ProfileSetup' }] });
+      return;
+    }
+
+    if (profile.moderation_status === 'approved') {
+      navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
+    } else {
+      navigation.reset({ index: 0, routes: [{ name: 'ModerationPending' }] });
+    }
+  }
 
   async function handleSignIn() {
     setError(null);
@@ -60,34 +88,43 @@ export default function SignIn() {
       return;
     }
 
-    // Проверяем, есть ли профиль и на какой он стадии модерации
-    // Проверяем не только наличие профиля, но и заполнена ли анкета —
-    // пустая запись (created at signup) не должна считаться "на модерации"
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('moderation_status, display_name')
-      .eq('id', userId)
-      .maybeSingle();
-
+    await routeAfterLogin(userId);
     setLoading(false);
+  }
 
-    if (profileError) {
-      setError('Не удалось загрузить профиль. Попробуйте ещё раз.');
+  async function handleTelegramLogin() {
+    setError(null);
+    setTelegramLoading(true);
+
+    const result = await loginWithTelegram();
+
+    if (result.status === 'error') {
+      setTelegramLoading(false);
+      Alert.alert('Не получилось', result.message);
       return;
     }
 
-    if (!profile || !profile.display_name) {
-      // Анкета ещё не заполнена — неважно, что стоит в moderation_status
-      navigation.reset({ index: 0, routes: [{ name: 'ProfileSetup' }] });
+    if (result.status === 'timeout') {
+      setTelegramLoading(false);
+      Alert.alert(
+        'Время вышло',
+        'Не увидели подтверждение от Telegram. Если вы нажали Start в боте, просто попробуйте ещё раз.'
+      );
       return;
     }
 
-    if (profile.moderation_status === 'approved') {
-      navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
-    } else {
-      // pending или rejected — оба ведут на экран ожидания/статуса модерации
-      navigation.reset({ index: 0, routes: [{ name: 'ModerationPending' }] });
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    setTelegramLoading(false);
+
+    if (!user) {
+      Alert.alert('Ошибка', 'Не удалось получить данные пользователя после входа.');
+      return;
     }
+
+    await routeAfterLogin(user.id);
   }
 
   function handleForgotPassword() {
@@ -141,6 +178,24 @@ export default function SignIn() {
         <Text style={styles.link}>Забыли пароль?</Text>
       </TouchableOpacity>
 
+      <View style={styles.divider}>
+        <View style={styles.dividerLine} />
+        <Text style={styles.dividerText}>или</Text>
+        <View style={styles.dividerLine} />
+      </View>
+
+      <TouchableOpacity
+        style={[styles.telegramButton, telegramLoading && styles.buttonDisabled]}
+        onPress={handleTelegramLogin}
+        disabled={telegramLoading || loading}
+      >
+        {telegramLoading ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.buttonText}>Войти через Telegram</Text>
+        )}
+      </TouchableOpacity>
+
       <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
         <Text style={styles.link}>Нет аккаунта? Зарегистрироваться</Text>
       </TouchableOpacity>
@@ -173,4 +228,13 @@ const styles = StyleSheet.create({
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   link: { textAlign: 'center', marginTop: 16, color: '#3b82f6', fontSize: 14 },
+  divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 20 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: '#2a2a2a' },
+  dividerText: { color: '#8a8a8e', fontSize: 13, marginHorizontal: 12 },
+  telegramButton: {
+    backgroundColor: '#229ED9',
+    borderRadius: 8,
+    padding: 16,
+    alignItems: 'center',
+  },
 });
