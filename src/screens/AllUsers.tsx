@@ -604,13 +604,44 @@ export default function AllUsers() {
                   activeOpacity={0.85}
                   onPress={() => navigation.navigate('ProfileDetail', { profileId: profile.id })}
                 >
-                  {profile.photo_url ? (
-                    <Image source={{ uri: profile.photo_url }} style={styles.photo} />
-                  ) : (
-                    <View style={[styles.photo, styles.photoPlaceholder]}>
-                      <Text style={styles.photoPlaceholderText}>Нет фото</Text>
-                    </View>
-                  )}
+                  <View style={styles.photoWrap}>
+                    {profile.photo_url ? (
+                      <Image source={{ uri: profile.photo_url }} style={styles.photo} />
+                    ) : (
+                      <View style={[styles.photo, styles.photoPlaceholder]}>
+                        <Text style={styles.photoPlaceholderText}>Нет фото</Text>
+                      </View>
+                    )}
+
+                    <TouchableOpacity
+                      style={[
+                        styles.statusBadge,
+                        match?.status === 'matched'
+                          ? styles.statusBadgeMatched
+                          : match
+                          ? styles.statusBadgeSent
+                          : styles.statusBadgeNone,
+                      ]}
+                      onPress={() => {
+                        if (match?.status === 'matched') {
+                          setQuickChat({ matchId: match.matchId, otherName: profile.display_name });
+                        } else if (!match) {
+                          handleLike(profile);
+                        }
+                      }}
+                      disabled={busy || match?.status === 'pending'}
+                    >
+                      {busy ? (
+                        <ActivityIndicator color="#fff" size="small" />
+                      ) : (
+                        <Ionicons
+                          name={match?.status === 'matched' ? 'checkmark-done' : match ? 'checkmark' : 'close'}
+                          size={16}
+                          color="#fff"
+                        />
+                      )}
+                    </TouchableOpacity>
+                  </View>
 
                   <View style={styles.cardBody}>
                     <View style={styles.nameRow}>
@@ -645,27 +676,6 @@ export default function AllUsers() {
                     )}
                   </View>
                 </TouchableOpacity>
-
-                {match?.status === 'matched' ? (
-                  <TouchableOpacity
-                    style={styles.messageButton}
-                    onPress={() => setQuickChat({ matchId: match.matchId, otherName: profile.display_name })}
-                  >
-                    <Text style={styles.likeButtonText}>Написать</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity
-                    style={[styles.likeButton, match && styles.likeButtonDone]}
-                    onPress={() => handleLike(profile)}
-                    disabled={!!match || busy}
-                  >
-                    {busy ? (
-                      <ActivityIndicator color="#fff" size="small" />
-                    ) : (
-                      <Text style={styles.likeButtonText}>{match ? 'Отправлено ✓' : 'Нравится'}</Text>
-                    )}
-                  </TouchableOpacity>
-                )}
               </View>
             );
           })}
@@ -786,8 +796,22 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   photo: { width: '100%', height: 140, backgroundColor: '#1c1c1e' },
+  photoWrap: { position: 'relative' },
   photoPlaceholder: { alignItems: 'center', justifyContent: 'center' },
   photoPlaceholderText: { color: '#8a8a8e', fontSize: 12 },
+  statusBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusBadgeNone: { backgroundColor: 'rgba(90,90,94,0.85)' },
+  statusBadgeSent: { backgroundColor: 'rgba(59,130,246,0.9)' },
+  statusBadgeMatched: { backgroundColor: 'rgba(34,197,94,0.9)' },
   cardBody: { padding: 10 },
   name: { fontSize: 14, fontWeight: '600', marginBottom: 2, color: '#f0f0f0' },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -796,22 +820,6 @@ const styles = StyleSheet.create({
   distance: { fontSize: 11, color: '#a0a0a5', marginBottom: 2, fontStyle: 'italic' },
   sobriety: { fontSize: 11, color: '#3b82f6', fontWeight: '600', marginBottom: 4 },
   bio: { fontSize: 12, color: '#f0f0f0', lineHeight: 16 },
-  likeButton: {
-    backgroundColor: '#3b82f6',
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#2a2a2a',
-  },
-  likeButtonDone: { backgroundColor: '#2a2a2a' },
-  likeButtonText: { color: '#fff', fontWeight: '600', fontSize: 12 },
-  messageButton: {
-    backgroundColor: '#22c55e',
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#2a2a2a',
-  },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalSheet: { backgroundColor: '#121212', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '85%' },
   modalContent: { padding: 20, paddingBottom: 40 },

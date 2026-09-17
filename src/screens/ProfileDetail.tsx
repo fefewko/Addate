@@ -67,7 +67,9 @@ export default function ProfileDetail() {
   const [distanceKm, setDistanceKm] = useState<number | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [myId, setMyId] = useState<string | null>(null);
-  const [alreadyActed, setAlreadyActed] = useState(false);
+  const [matchInfo, setMatchInfo] = useState<{ matchId: string; status: 'pending' | 'matched' | 'rejected' } | null>(
+    null
+  );
   const [liking, setLiking] = useState(false);
 
   const load = useCallback(async () => {
@@ -89,13 +91,14 @@ export default function ProfileDetail() {
 
     if (!error && data) setProfile(data as FullProfile);
 
+    // Проверяем совпадение в ОБЕ стороны — иначе не узнаем про matched,
+    // если собеседник лайкнул первым.
     const { data: existingMatch } = await supabase
       .from('matches')
-      .select('id')
-      .eq('user_a', user.id)
-      .eq('user_b', profileId)
+      .select('id, status')
+      .or(`and(user_a.eq.${user.id},user_b.eq.${profileId}),and(user_a.eq.${profileId},user_b.eq.${user.id})`)
       .maybeSingle();
-    setAlreadyActed(!!existingMatch);
+    setMatchInfo(existingMatch ? { matchId: existingMatch.id, status: existingMatch.status } : null);
 
     const { data: myProfile } = await supabase
       .from('profiles')
@@ -120,7 +123,7 @@ export default function ProfileDetail() {
   }, [load]);
 
   async function handleLike() {
-    if (!myId || !profile || alreadyActed) return;
+    if (!myId || !profile || matchInfo) return;
     setLiking(true);
 
     const { data: reverseMatch } = await supabase
@@ -136,17 +139,31 @@ export default function ProfileDetail() {
         .update({ status: 'matched', matched_at: new Date().toISOString() })
         .eq('id', reverseMatch.id);
       setLiking(false);
-      setAlreadyActed(true);
+      setMatchInfo({ matchId: reverseMatch.id, status: 'matched' });
+      const age = calcAge(profile.birth_date);
       Alert.alert('Это совпадение! 🎉', `Вы с ${profile.display_name || 'этим человеком'} понравились друг другу.`, [
-        { text: 'Написать сообщение', onPress: () => navigation.navigate('ChatList') },
+        {
+          text: 'Написать сообщение',
+          onPress: () =>
+            navigation.navigate('Chat', {
+              matchId: reverseMatch.id,
+              otherUserId: profile.id,
+              otherName: profile.display_name,
+              otherAge: age,
+            }),
+        },
         { text: 'Продолжить', style: 'cancel' },
       ]);
       return;
     }
 
-    await supabase.from('matches').insert({ user_a: myId, user_b: profile.id, status: 'pending' });
+    const { data: inserted } = await supabase
+      .from('matches')
+      .insert({ user_a: myId, user_b: profile.id, status: 'pending' })
+      .select('id')
+      .single();
     setLiking(false);
-    setAlreadyActed(true);
+    setMatchInfo({ matchId: inserted?.id || '', status: 'pending' });
   }
 
   if (loading) {
@@ -224,17 +241,33 @@ export default function ProfileDetail() {
 
         {profile.bio && <Text style={styles.bio}>{profile.bio}</Text>}
 
-        <TouchableOpacity
-          style={[styles.likeButton, alreadyActed && styles.likeButtonDone]}
-          onPress={handleLike}
-          disabled={alreadyActed || liking}
-        >
-          {liking ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.likeButtonText}>{alreadyActed ? 'Уже отправлено' : 'Нравится'}</Text>
-          )}
-        </TouchableOpacity>
+        {matchInfo?.status === 'matched' ? (
+          <TouchableOpacity
+            style={styles.messageButton}
+            onPress={() =>
+              navigation.navigate('Chat', {
+                matchId: matchInfo.matchId,
+                otherUserId: profile.id,
+                otherName: profile.display_name,
+                otherAge: age,
+              })
+            }
+          >
+            <Text style={styles.likeButtonText}>Написать сообщение</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[styles.likeButton, matchInfo && styles.likeButtonDone]}
+            onPress={handleLike}
+            disabled={!!matchInfo || liking}
+          >
+            {liking ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.likeButtonText}>{matchInfo ? 'Уже отправлено' : 'Нравится'}</Text>
+            )}
+          </TouchableOpacity>
+        )}
       </View>
     </ScrollView>
   );
@@ -263,4 +296,5 @@ const styles = StyleSheet.create({
   likeButton: { backgroundColor: '#3b82f6', borderRadius: 10, padding: 16, alignItems: 'center' },
   likeButtonDone: { backgroundColor: '#2a2a2a' },
   likeButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  messageButton: { backgroundColor: '#22c55e', borderRadius: 10, padding: 16, alignItems: 'center' },
 });
