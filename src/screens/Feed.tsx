@@ -60,7 +60,7 @@ export default function Feed() {
   const updateMyLocation = useCallback(async (userId: string) => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return; // молча пропускаем — фича необязательная
+      if (status !== 'granted') return;
 
       const position = await Location.getCurrentPositionAsync({});
       await supabase
@@ -94,15 +94,23 @@ export default function Feed() {
       blockedIds.add(b.blocker_id === user.id ? b.blocked_id : b.blocker_id);
     });
 
-    // 2. Кому я уже поставил лайк/скип, или кто уже совпал со мной (в любом направлении)
+    // 2. Исключаем только тех, с кем я уже сам совершил действие,
+    //    либо с кем уже состоялось совпадение.
+    //    Входящий лайк (user_a = другой пользователь, user_b = я)
+    //    не должен убирать человека из моей ленты.
     const { data: actedData } = await supabase
       .from('matches')
-      .select('user_a, user_b')
-      .or(`user_a.eq.${user.id},user_b.eq.${user.id}`);
+      .select('user_a, user_b, status')
+      .eq('user_a', user.id);
 
     const actedIds = new Set(
-      (actedData || []).map((m) => (m.user_a === user.id ? m.user_b : m.user_a))
+      (actedData || []).map((m) => m.user_b)
     );
+
+    // Уже взаимно совпавших пользователей также не показываем.
+    (actedData || [])
+      .filter((m) => m.status === 'matched')
+      .forEach((m) => actedIds.add(m.user_b));
 
     const excludeIds = [user.id, ...blockedIds, ...actedIds];
 
@@ -119,10 +127,6 @@ export default function Feed() {
       return;
     }
 
-    // Расстояния считаются на сервере (см. функцию nearby_profiles) —
-    // клиент никогда не получает точные координаты других пользователей,
-    // только готовое значение в километрах. Это осознанное решение по
-    // безопасности для приложения такой тематики.
     const { data: myProfile } = await supabase
       .from('profiles')
       .select('latitude, longitude')
@@ -163,7 +167,6 @@ export default function Feed() {
       return;
     }
 
-    // action === 'like' — проверяем, нет ли встречного лайка от этого человека
     const { data: reverseMatch } = await supabase
       .from('matches')
       .select('id, status')
@@ -172,7 +175,6 @@ export default function Feed() {
       .maybeSingle();
 
     if (reverseMatch && reverseMatch.status === 'pending') {
-      // Взаимный лайк — обновляем существующую запись до matched
       await supabase
         .from('matches')
         .update({ status: 'matched', matched_at: new Date().toISOString() })
@@ -187,7 +189,6 @@ export default function Feed() {
       return;
     }
 
-    // Обычный лайк без взаимности пока
     await supabase.from('matches').insert({
       user_a: myId,
       user_b: target.id,
