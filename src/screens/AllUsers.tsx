@@ -74,11 +74,9 @@ const SUBSTANCE_OPTIONS = [
   { value: 'other', label: 'Другое' },
 ];
 
-const DISTANCE_OPTIONS: { value: 'any' | '5' | '15' | '50'; label: string }[] = [
+const DISTANCE_OPTIONS: { value: 'any' | '5'; label: string }[] = [
   { value: 'any', label: 'Не важно' },
   { value: '5', label: 'Рядом (до 5 км)' },
-  { value: '15', label: 'До 15 км' },
-  { value: '50', label: 'До 50 км' },
 ];
 
 const AUTO_REFRESH_MS = 60_000;
@@ -93,10 +91,9 @@ type Filters = {
   city: string;
   ageMin: number;
   ageMax: number;
-  distance: 'any' | '5' | '15' | '50';
+  distance: 'any' | '5';
   substances: string[];
   sobriety: SobrietyStatus | 'any';
-  onlineOnly: boolean;
 };
 
 const DEFAULT_FILTERS: Filters = {
@@ -106,7 +103,6 @@ const DEFAULT_FILTERS: Filters = {
   distance: 'any',
   substances: [],
   sobriety: 'any',
-  onlineOnly: false,
 };
 
 const AGE_MIN = 18;
@@ -620,8 +616,6 @@ export default function AllUsers() {
 
     if (filters.sobriety !== 'any' && p.sobriety_status !== filters.sobriety) return false;
 
-    if (filters.onlineOnly && !isOnline(p.last_seen_at)) return false;
-
     return true;
   });
 
@@ -630,8 +624,7 @@ export default function AllUsers() {
     (filters.ageMin !== DEFAULT_FILTERS.ageMin || filters.ageMax !== DEFAULT_FILTERS.ageMax ? 1 : 0) +
     (filters.distance !== 'any' ? 1 : 0) +
     (filters.substances.length > 0 ? 1 : 0) +
-    (filters.sobriety !== 'any' ? 1 : 0) +
-    (filters.onlineOnly ? 1 : 0);
+    (filters.sobriety !== 'any' ? 1 : 0);
 
   if (loading) {
     return (
@@ -798,17 +791,6 @@ export default function AllUsers() {
                   <Text style={styles.optionLabel}>{opt.label}</Text>
                 </TouchableOpacity>
               ))}
-
-              <Text style={styles.filterLabel}>Статус</Text>
-              <TouchableOpacity
-                style={styles.optionRow}
-                onPress={() => setDraftFilters((p) => ({ ...p, onlineOnly: !p.onlineOnly }))}
-              >
-                <View style={[styles.checkbox, draftFilters.onlineOnly && styles.checkboxChecked]}>
-                  {draftFilters.onlineOnly && <Text style={styles.checkboxMark}>✓</Text>}
-                </View>
-                <Text style={styles.optionLabel}>Только онлайн</Text>
-              </TouchableOpacity>
 
               <Text style={styles.filterLabel}>Чистота</Text>
               {SOBRIETY_FILTER_OPTIONS.map((opt) => (
