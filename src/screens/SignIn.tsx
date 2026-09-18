@@ -15,6 +15,10 @@ import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { loginWithTelegram } from '../lib/telegramAuth';
 
+// Вход через Telegram временно скрыт из интерфейса — код и серверная часть
+// остаются рабочими, доделаем и включим позже. Чтобы вернуть кнопку — просто true.
+const TELEGRAM_LOGIN_ENABLED = false;
+
 function mapAuthError(message: string): string {
   if (message.includes('Invalid login credentials')) {
     return 'Неверный email или пароль.';
@@ -178,23 +182,27 @@ export default function SignIn() {
         <Text style={styles.link}>Забыли пароль?</Text>
       </TouchableOpacity>
 
-      <View style={styles.divider}>
-        <View style={styles.dividerLine} />
-        <Text style={styles.dividerText}>или</Text>
-        <View style={styles.dividerLine} />
-      </View>
+      {TELEGRAM_LOGIN_ENABLED && (
+        <>
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>или</Text>
+            <View style={styles.dividerLine} />
+          </View>
 
-      <TouchableOpacity
-        style={[styles.telegramButton, telegramLoading && styles.buttonDisabled]}
-        onPress={handleTelegramLogin}
-        disabled={telegramLoading || loading}
-      >
-        {telegramLoading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>Войти через Telegram</Text>
-        )}
-      </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.telegramButton, telegramLoading && styles.buttonDisabled]}
+            onPress={handleTelegramLogin}
+            disabled={telegramLoading || loading}
+          >
+            {telegramLoading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>Войти через Telegram</Text>
+            )}
+          </TouchableOpacity>
+        </>
+      )}
 
       <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
         <Text style={styles.link}>Нет аккаунта? Зарегистрироваться</Text>
