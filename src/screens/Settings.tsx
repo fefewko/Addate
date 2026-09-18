@@ -67,6 +67,24 @@ export default function Settings() {
     );
   }
 
+  async function handleSignOut() {
+    Alert.alert('Выйти из аккаунта?', 'Вы сможете войти снова в любое время.', [
+      { text: 'Отмена', style: 'cancel' },
+      {
+        text: 'Выйти',
+        style: 'destructive',
+        onPress: async () => {
+          const { error } = await supabase.auth.signOut();
+          if (error) {
+            Alert.alert('Ошибка', 'Не удалось выйти из аккаунта: ' + error.message);
+            return;
+          }
+          navigation.reset({ index: 0, routes: [{ name: 'SignIn' }] });
+        },
+      },
+    ]);
+  }
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.sectionTitle}>Уведомления</Text>
@@ -99,6 +117,11 @@ export default function Settings() {
         onPress={() => Linking.openURL('mailto:support@addate.ru')}
       >
         <Text style={styles.actionText}>Написать в поддержку</Text>
+      </TouchableOpacity>
+
+      <Text style={styles.sectionTitle}>Аккаунт</Text>
+      <TouchableOpacity style={styles.actionRow} onPress={handleSignOut}>
+        <Text style={styles.actionText}>Выйти из аккаунта</Text>
       </TouchableOpacity>
 
       <Text style={styles.sectionTitle}>Опасная зона</Text>
