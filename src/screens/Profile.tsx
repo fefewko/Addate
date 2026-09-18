@@ -257,11 +257,6 @@ export default function Profile() {
     Alert.alert('Сохранено', 'Изменения профиля сохранены.');
   }
 
-  async function handleSignOut() {
-    await supabase.auth.signOut();
-    navigation.reset({ index: 0, routes: [{ name: 'SignIn' }] });
-  }
-
   React.useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
@@ -427,9 +422,6 @@ export default function Profile() {
         </TouchableOpacity>
       )}
 
-      <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-        <Text style={styles.signOutButtonText}>Выйти из аккаунта</Text>
-      </TouchableOpacity>
     </ScrollView>
 
     <PhotoViewerModal
@@ -605,6 +597,4 @@ const styles = StyleSheet.create({
   saveButton: { backgroundColor: '#3b82f6', borderRadius: 8, padding: 16, alignItems: 'center', marginTop: 20 },
   buttonDisabled: { opacity: 0.6 },
   saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  signOutButton: { padding: 16, alignItems: 'center', marginTop: 12 },
-  signOutButtonText: { color: '#a0a0a5', fontSize: 15 },
 });
