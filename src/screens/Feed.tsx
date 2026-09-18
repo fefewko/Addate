@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import * as Location from 'expo-location';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '../lib/supabase';
 
 type Profile = {
@@ -263,7 +264,7 @@ export default function Feed() {
           onPress={() => handleAction(current, 'skip')}
           disabled={busy}
         >
-          <Text style={styles.skipButtonText}>Пропустить</Text>
+          <Ionicons name="close" size={28} color="#a0a0a5" />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.likeButton}
@@ -273,7 +274,7 @@ export default function Feed() {
           {busy ? (
             <ActivityIndicator color="#fff" size="small" />
           ) : (
-            <Text style={styles.likeButtonText}>Нравится</Text>
+            <Ionicons name="heart" size={28} color="#fff" />
           )}
         </TouchableOpacity>
       </View>
@@ -302,7 +303,5 @@ const styles = StyleSheet.create({
   bio: { fontSize: 15, color: '#f0f0f0', lineHeight: 21 },
   actions: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#2a2a2a' },
   skipButton: { flex: 1, padding: 16, alignItems: 'center', borderRightWidth: 1, borderRightColor: '#2a2a2a' },
-  skipButtonText: { color: '#a0a0a5', fontWeight: '600', fontSize: 16 },
   likeButton: { flex: 1, padding: 16, alignItems: 'center', backgroundColor: '#3b82f6' },
-  likeButtonText: { color: '#fff', fontWeight: '600', fontSize: 16 },
 });
