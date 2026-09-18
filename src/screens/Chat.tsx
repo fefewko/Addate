@@ -52,6 +52,11 @@ export default function Chat() {
   const [myId, setMyId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [reportVisible, setReportVisible] = useState(false);
+  const [reportCategory, setReportCategory] = useState<string | null>(null);
+  const [reportDescription, setReportDescription] = useState('');
+  const [reportPhoto, setReportPhoto] = useState<{ uri: string; name: string; type: string } | null>(null);
+  const [reportSubmitting, setReportSubmitting] = useState(false);
   const listRef = useRef<FlatList>(null);
 
   useEffect(() => {
@@ -200,49 +205,42 @@ export default function Chat() {
     );
   }
 
-  function handleReport() {
-    // Простой выбор категории через нативный action sheet (iOS) или Alert (Android)
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: [...REPORT_CATEGORIES.map((c) => c.label), 'Отмена'],
-          cancelButtonIndex: REPORT_CATEGORIES.length,
-        },
-        (index) => {
-          if (index < REPORT_CATEGORIES.length) {
-            submitReport(REPORT_CATEGORIES[index].value);
-          }
-        }
-      );
-    } else {
-      Alert.alert(
-        'Пожаловаться',
-        'Выберите причину',
-        [
-          ...REPORT_CATEGORIES.map((c) => ({
-            text: c.label,
-            onPress: () => submitReport(c.value),
-          })),
-          { text: 'Отмена', style: 'cancel' as const },
-        ]
-      );
-    }
+  function handleReport() { setReportVisible(true); }
+
+  async function pickReportPhoto() {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) { Alert.alert('Нужен доступ', 'Разрешите доступ к галерее, чтобы прикрепить фото к жалобе.'); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.7 });
+    if (result.canceled || !result.assets?.[0]?.uri) return;
+    const asset = result.assets[0];
+    setReportPhoto({ uri: asset.uri, name: asset.fileName || ('report-' + Date.now() + '.jpg'), type: asset.mimeType || 'image/jpeg' });
   }
 
-  async function submitReport(category: string) {
-    if (!myId) return;
-    const { error } = await supabase.from('reports').insert({
-      reporter_id: myId,
-      reported_id: otherUserId,
-      category,
-    });
-
-    if (error) {
-      Alert.alert('Ошибка', 'Не удалось отправить жалобу.');
-      return;
-    }
-    Alert.alert('Спасибо', 'Жалоба отправлена на рассмотрение модератору.');
+  async function submitReport() {
+    if (!myId || !reportCategory || reportSubmitting) return;
+    setReportSubmitting(true);
+    try {
+      const { data: report, error } = await supabase.from('reports').insert({
+        reporter_id: myId, reported_id: otherUserId, category: reportCategory,
+        description: reportDescription.trim() || null,
+      }).select('id').single();
+      if (error || !report) throw new Error(error?.message || 'Не удалось создать жалобу.');
+      if (reportPhoto) {
+        const ext = reportPhoto.name.split('.').pop()?.toLowerCase() || 'jpg';
+        const path = myId + '/' + report.id + '/evidence-' + Date.now() + '.' + ext;
+        const response = await fetch(reportPhoto.uri);
+        const blob = await response.blob();
+        const { error: uploadError } = await supabase.storage.from('report-images').upload(path, blob, { contentType: reportPhoto.type, upsert: false });
+        if (uploadError) throw new Error(uploadError.message);
+        const { error: attachmentError } = await supabase.from('report_attachments').insert({ report_id: report.id, storage_path: path });
+        if (attachmentError) throw new Error(attachmentError.message);
+      }
+      setReportVisible(false); setReportCategory(null); setReportDescription(''); setReportPhoto(null);
+      Alert.alert('Спасибо', 'Жалоба отправлена на рассмотрение модератору.');
+    } catch (e: any) { Alert.alert('Ошибка', 'Не удалось отправить жалобу: ' + e.message); }
+    finally { setReportSubmitting(false); }
   }
+
 
   return (
     <KeyboardAvoidingView
@@ -258,6 +256,27 @@ export default function Chat() {
           <Text style={[styles.headerButtonText, styles.blockText]}>Заблокировать</Text>
         </TouchableOpacity>
       </View>
+
+      <Modal visible={reportVisible} animationType="slide" transparent onRequestClose={() => !reportSubmitting && setReportVisible(false)}>
+        <View style={styles.reportOverlay}><View style={styles.reportSheet}>
+          <Text style={styles.reportTitle}>Пожаловаться</Text>
+          <Text style={styles.reportHint}>Выберите причину</Text>
+          {REPORT_CATEGORIES.map((item) => (
+            <TouchableOpacity key={item.value} style={styles.reportOption} onPress={() => setReportCategory(item.value)}>
+              <View style={[styles.radio, reportCategory === item.value && styles.radioSelected]} /><Text style={styles.reportOptionText}>{item.label}</Text>
+            </TouchableOpacity>
+          ))}
+          <TextInput style={styles.reportDescription} placeholder="Опишите, что сделал пользователь (необязательно)" placeholderTextColor="#8a8a8e" value={reportDescription} onChangeText={setReportDescription} multiline maxLength={2000} />
+          <TouchableOpacity style={styles.reportPhotoButton} onPress={pickReportPhoto} disabled={reportSubmitting}>
+            <Ionicons name="image-outline" size={22} color="#f0f0f0" /><Text style={styles.reportPhotoText}>{reportPhoto ? 'Фото прикреплено ✓' : 'Прикрепить фото'}</Text>
+          </TouchableOpacity>
+          {reportPhoto && <Image source={{ uri: reportPhoto.uri }} style={styles.reportPhotoPreview} />}
+          <TouchableOpacity style={[styles.reportSubmit, (!reportCategory || reportSubmitting) && styles.sendButtonDisabled]} onPress={submitReport} disabled={!reportCategory || reportSubmitting}>
+            {reportSubmitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.reportSubmitText}>Отправить жалобу</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.reportCancel} onPress={() => setReportVisible(false)} disabled={reportSubmitting}><Text style={styles.reportCancelText}>Отмена</Text></TouchableOpacity>
+        </View></View>
+      </Modal>
 
       <FlatList
         ref={listRef}
@@ -393,4 +412,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   previewImage: { width: '100%', height: '80%' },
+  reportOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
+  reportSheet: { backgroundColor: '#121212', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '90%' },
+  reportTitle: { fontSize: 20, fontWeight: '700', color: '#f0f0f0', marginBottom: 16 },
+  reportHint: { fontSize: 14, color: '#a0a0a5', marginBottom: 10 },
+  reportOption: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 }, reportOptionText: { color: '#f0f0f0', fontSize: 15 },
+  reportDescription: { minHeight: 90, maxHeight: 150, backgroundColor: '#1c1c1e', color: '#f0f0f0', borderWidth: 1, borderColor: '#2a2a2a', borderRadius: 10, padding: 12, textAlignVertical: 'top', marginTop: 8 },
+  reportPhotoButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, gap: 8 }, reportPhotoText: { color: '#f0f0f0', fontSize: 15 }, reportPhotoPreview: { width: 90, height: 90, borderRadius: 8, marginBottom: 10 },
+  reportSubmit: { backgroundColor: '#ef4444', borderRadius: 10, padding: 15, alignItems: 'center', marginTop: 6 }, reportSubmitText: { color: '#fff', fontWeight: '600', fontSize: 15 }, reportCancel: { padding: 14, alignItems: 'center' }, reportCancelText: { color: '#a0a0a5', fontSize: 14 },
 });
