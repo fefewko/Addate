@@ -66,7 +66,22 @@ export default function ChatList() {
       return;
     }
 
-    const rows = (data as unknown as MatchRow[]) || [];
+    // Заблокированные (в любую сторону) не должны оставаться видимыми в списке
+    // диалогов, даже если совпадение когда-то было подтверждено.
+    const { data: blocksData } = await supabase
+      .from('blocks')
+      .select('blocker_id, blocked_id')
+      .or(`blocker_id.eq.${user.id},blocked_id.eq.${user.id}`);
+
+    const blockedIds = new Set<string>();
+    (blocksData || []).forEach((b) => {
+      blockedIds.add(b.blocker_id === user.id ? b.blocked_id : b.blocker_id);
+    });
+
+    const rows = ((data as unknown as MatchRow[]) || []).filter((m) => {
+      const otherId = m.user_a === user.id ? m.user_b : m.user_a;
+      return !blockedIds.has(otherId);
+    });
 
     // Непрочитанные сообщения по каждому совпадению — одним запросом,
     // затем раскладываем по match_id на клиенте.
