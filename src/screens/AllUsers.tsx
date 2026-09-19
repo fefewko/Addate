@@ -26,6 +26,15 @@ import { supabase } from '../lib/supabase';
 
 type SobrietyStatus = 'trezv' | 'v_sryve' | 'ne_ukazano';
 
+type AdItem = {
+  id: string;
+  type: 'ad';
+  title: string;
+  description: string;
+  imageUrl?: string;
+  actionUrl?: string;
+};
+
 type Profile = {
   id: string;
   display_name: string | null;
@@ -38,6 +47,12 @@ type Profile = {
   last_seen_at: string | null;
   distanceKm?: number;
 };
+
+type ListItem = Profile | AdItem;
+
+function isAdItem(item: ListItem): item is AdItem {
+  return (item as AdItem).type === 'ad';
+}
 
 type MatchInfo = { matchId: string; status: 'pending' | 'matched' | 'rejected' };
 
@@ -454,6 +469,16 @@ export default function AllUsers() {
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [draftFilters, setDraftFilters] = useState<Filters>(DEFAULT_FILTERS);
 
+  // Нативная реклама — показывается вместо каждого 5-го пользователя
+  const adItem: AdItem = {
+    id: 'ad-promo-1',
+    type: 'ad',
+    title: 'Поддержка 24/7',
+    description: 'Горячая линия помощи для зависимых и их близких. Анонимно. Бесплатно.',
+    imageUrl: 'https://via.placeholder.com/400x200?text=Help+Line',
+    actionUrl: 'tel:+78000000000',
+  };
+
   const loadAll = useCallback(async () => {
     setLoading(true);
 
@@ -655,7 +680,42 @@ export default function AllUsers() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.list}>
-          {visibleProfiles.map((profile) => {
+          {visibleProfiles.reduce<ListItem[]>((acc, profile, index) => {
+            // Вставляем рекламу после каждого 4-го профиля (т.е. на позиции 5, 10, 15...)
+            if ((index + 1) % 5 === 0) {
+              acc.push(adItem);
+            }
+            acc.push(profile);
+            return acc;
+          }, []).map((item) => {
+            if (isAdItem(item)) {
+              return (
+                <View key={item.id} style={styles.adCard}>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => {
+                      if (item.actionUrl) {
+                        supabase.auth.getUser().then(({ data }) => {
+                          console.log('Реклама: переход по ссылке', item.actionUrl, 'пользователь', data?.user?.id);
+                        });
+                        // Здесь можно открыть ссылку или позвонить
+                      }
+                    }}
+                  >
+                    {item.imageUrl && (
+                      <Image source={{ uri: item.imageUrl }} style={styles.adImage} resizeMode="cover" />
+                    )}
+                    <View style={styles.adContent}>
+                      <Text style={styles.adTitle}>{item.title}</Text>
+                      <Text style={styles.adDescription}>{item.description}</Text>
+                      <Text style={styles.adLabel}>Реклама</Text>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              );
+            }
+
+            const profile = item as Profile;
             const age = calcAge(profile.birth_date);
             const match = matchMap.get(profile.id);
             const busy = busyId === profile.id;
@@ -974,4 +1034,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   previewImage: { width: '100%', height: '80%' },
+  // Стили для рекламного блока
+  adCard: {
+    width: '100%',
+    backgroundColor: '#1c1c1e',
+    borderRadius: 12,
+    marginBottom: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+  },
+  adImage: { width: '100%', height: 140 },
+  adContent: { padding: 12 },
+  adTitle: { fontSize: 16, fontWeight: '700', color: '#f0f0f0', marginBottom: 4 },
+  adDescription: { fontSize: 13, color: '#a0a0a5', lineHeight: 18, marginBottom: 6 },
+  adLabel: { fontSize: 10, color: '#5a5a5e', fontWeight: '600', textTransform: 'uppercase' },
 });
