@@ -12,6 +12,7 @@ import {
   Alert,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '../lib/supabase';
 import { likeProfile } from '../lib/matches';
 import { SOBRIETY_LABEL, SUBSTANCE_LABEL, SobrietyStatus, calcAge, isOnline } from '../lib/profileDisplay';
@@ -128,6 +129,16 @@ export default function ProfileDetail() {
     }
   }
 
+  async function handleSkip() {
+    if (!myId || !profile || matchInfo) return;
+    setLiking(true);
+
+    await supabase.from('matches').insert({ user_a: myId, user_b: profile.id, status: 'rejected' });
+
+    setLiking(false);
+    navigation.goBack();
+  }
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -217,18 +228,19 @@ export default function ProfileDetail() {
           >
             <Text style={styles.likeButtonText}>Написать сообщение</Text>
           </TouchableOpacity>
+        ) : matchInfo ? (
+          <View style={[styles.likeButton, styles.likeButtonDone]}>
+            <Text style={styles.likeButtonText}>Уже отправлено</Text>
+          </View>
         ) : (
-          <TouchableOpacity
-            style={[styles.likeButton, matchInfo && styles.likeButtonDone]}
-            onPress={handleLike}
-            disabled={!!matchInfo || liking}
-          >
-            {liking ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.likeButtonText}>{matchInfo ? 'Уже отправлено' : 'Нравится'}</Text>
-            )}
-          </TouchableOpacity>
+          <View style={styles.actionsRow}>
+            <TouchableOpacity style={styles.skipButton} onPress={handleSkip} disabled={liking}>
+              <Ionicons name="close" size={28} color="#a0a0a5" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.heartButton} onPress={handleLike} disabled={liking}>
+              {liking ? <ActivityIndicator color="#fff" /> : <Ionicons name="heart" size={28} color="#fff" />}
+            </TouchableOpacity>
+          </View>
         )}
       </View>
     </ScrollView>
@@ -259,4 +271,15 @@ const styles = StyleSheet.create({
   likeButtonDone: { backgroundColor: '#2a2a2a' },
   likeButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   messageButton: { backgroundColor: '#22c55e', borderRadius: 10, padding: 16, alignItems: 'center' },
+  actionsRow: { flexDirection: 'row', gap: 12 },
+  skipButton: {
+    flex: 1,
+    backgroundColor: '#1c1c1e',
+    borderRadius: 10,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+  },
+  heartButton: { flex: 1, backgroundColor: '#3b82f6', borderRadius: 10, padding: 16, alignItems: 'center' },
 });
