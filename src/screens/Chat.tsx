@@ -50,6 +50,7 @@ export default function Chat() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [text, setText] = useState('');
   const [myId, setMyId] = useState<string | null>(null);
+  const [isSupport, setIsSupport] = useState(false);
   const [sending, setSending] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const listRef = useRef<FlatList>(null);
@@ -58,6 +59,15 @@ export default function Chat() {
     const title = otherAge ? `${otherName || 'Чат'}, ${otherAge}` : otherName || 'Чат';
     navigation.setOptions({ title });
   }, [navigation, otherName, otherAge]);
+
+  useEffect(() => {
+    supabase
+      .from('profiles')
+      .select('is_admin')
+      .eq('id', otherUserId)
+      .maybeSingle()
+      .then(({ data }) => setIsSupport(!!data?.is_admin));
+  }, [otherUserId]);
 
   const loadMessages = useCallback(async () => {
     const {
@@ -190,7 +200,11 @@ export default function Chat() {
               blocked_id: otherUserId,
             });
             if (error) {
-              Alert.alert('Ошибка', 'Не удалось заблокировать пользователя.');
+              if (error.message.includes('Нельзя заблокировать поддержку')) {
+                Alert.alert('Нельзя заблокировать', 'Аккаунт поддержки заблокировать нельзя.');
+              } else {
+                Alert.alert('Ошибка', 'Не удалось заблокировать пользователя.');
+              }
               return;
             }
             navigation.navigate('ChatList');
@@ -254,9 +268,11 @@ export default function Chat() {
         <TouchableOpacity onPress={handleReport} style={styles.headerButton}>
           <Text style={styles.headerButtonText}>Пожаловаться</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={handleBlock} style={styles.headerButton}>
-          <Text style={[styles.headerButtonText, styles.blockText]}>Заблокировать</Text>
-        </TouchableOpacity>
+        {!isSupport && (
+          <TouchableOpacity onPress={handleBlock} style={styles.headerButton}>
+            <Text style={[styles.headerButtonText, styles.blockText]}>Заблокировать</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <FlatList
