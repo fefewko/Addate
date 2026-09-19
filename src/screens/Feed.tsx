@@ -14,6 +14,7 @@ import { useNavigation } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '../lib/supabase';
+import { likeProfile } from '../lib/matches';
 import { SOBRIETY_LABEL, SobrietyStatus, calcAge, isOnline, formatDistance } from '../lib/profileDisplay';
 
 type Profile = {
@@ -141,39 +142,26 @@ export default function Feed() {
       return;
     }
 
-    // action === 'like' — проверяем, нет ли встречного лайка от этого человека
-    const { data: reverseMatch } = await supabase
-      .from('matches')
-      .select('id, status')
-      .eq('user_a', target.id)
-      .eq('user_b', myId)
-      .maybeSingle();
-
-    if (reverseMatch && reverseMatch.status === 'pending') {
-      // Взаимный лайк — обновляем существующую запись до matched
-      await supabase
-        .from('matches')
-        .update({ status: 'matched', matched_at: new Date().toISOString() })
-        .eq('id', reverseMatch.id);
-
-      setProfiles((prev) => prev.filter((p) => p.id !== target.id));
-      setActingOnId(null);
-      Alert.alert('Это совпадение! 🎉', `Вы с ${target.display_name || 'этим человеком'} понравились друг другу.`, [
-        { text: 'Написать сообщение', onPress: () => navigation.navigate('ChatList') },
-        { text: 'Продолжить смотреть анкеты', style: 'cancel' },
-      ]);
-      return;
-    }
-
-    // Обычный лайк без взаимности пока
-    await supabase.from('matches').insert({
-      user_a: myId,
-      user_b: target.id,
-      status: 'pending',
-    });
-
+    const result = await likeProfile(myId, target.id);
     setProfiles((prev) => prev.filter((p) => p.id !== target.id));
     setActingOnId(null);
+
+    if (result.matched) {
+      const age = calcAge(target.birth_date);
+      Alert.alert('Это совпадение! 🎉', `Вы с ${target.display_name || 'этим человеком'} понравились друг другу.`, [
+        {
+          text: 'Написать сообщение',
+          onPress: () =>
+            navigation.navigate('Chat', {
+              matchId: result.matchId,
+              otherUserId: target.id,
+              otherName: target.display_name,
+              otherAge: age,
+            }),
+        },
+        { text: 'Продолжить смотреть анкеты', style: 'cancel' },
+      ]);
+    }
   }
 
   if (loading) {
