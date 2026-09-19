@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
+import { calcAge } from '../lib/profileDisplay';
 
 type MatchRow = {
   id: string;
@@ -29,12 +30,6 @@ type MatchItem = {
   matchedAt: string | null;
   hasUnread: boolean;
 };
-
-function calcAge(birthDate: string | null): number | null {
-  if (!birthDate) return null;
-  const diff = Date.now() - new Date(birthDate).getTime();
-  return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
-}
 
 export default function ChatList() {
   const navigation = useNavigation<any>();

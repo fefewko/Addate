@@ -14,6 +14,7 @@ import { useNavigation } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '../lib/supabase';
+import { SOBRIETY_LABEL, SobrietyStatus, calcAge, isOnline, formatDistance } from '../lib/profileDisplay';
 
 type Profile = {
   id: string;
@@ -21,35 +22,11 @@ type Profile = {
   birth_date: string | null;
   city: string | null;
   bio: string | null;
-  sobriety_status: 'trezv' | 'v_sryve' | 'ne_ukazano';
+  sobriety_status: SobrietyStatus;
   photo_url: string | null;
   last_seen_at: string | null;
   distanceKm?: number;
 };
-
-const ONLINE_THRESHOLD_MS = 3 * 60 * 1000;
-function isOnline(lastSeenAt: string | null): boolean {
-  if (!lastSeenAt) return false;
-  return Date.now() - new Date(lastSeenAt).getTime() < ONLINE_THRESHOLD_MS;
-}
-
-const SOBRIETY_LABEL: Record<string, string> = {
-  trezv: 'Трезв(а)',
-  v_sryve: 'Сейчас непросто',
-  ne_ukazano: 'Статус не указан',
-};
-
-function formatDistance(km: number | undefined): string | null {
-  if (km === undefined) return null;
-  if (km < 1) return 'Меньше 1 км от вас';
-  return `~${Math.round(km)} км от вас`;
-}
-
-function calcAge(birthDate: string | null): number | null {
-  if (!birthDate) return null;
-  const diff = Date.now() - new Date(birthDate).getTime();
-  return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
-}
 
 export default function Feed() {
   const navigation = useNavigation<any>();

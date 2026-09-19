@@ -23,8 +23,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { uploadChatImage, getSignedChatImageUrls } from '../lib/chatImages';
 import { likeProfile } from '../lib/matches';
 import { supabase } from '../lib/supabase';
-
-type SobrietyStatus = 'trezv' | 'v_sryve' | 'ne_ukazano';
+import { SOBRIETY_LABEL, SobrietyStatus, calcAge, isOnline, formatDistance } from '../lib/profileDisplay';
 
 type Profile = {
   id: string;
@@ -40,24 +39,6 @@ type Profile = {
 };
 
 type MatchInfo = { matchId: string; status: 'pending' | 'matched' | 'rejected' };
-
-const ONLINE_THRESHOLD_MS = 3 * 60 * 1000;
-function isOnline(lastSeenAt: string | null): boolean {
-  if (!lastSeenAt) return false;
-  return Date.now() - new Date(lastSeenAt).getTime() < ONLINE_THRESHOLD_MS;
-}
-
-function formatDistance(km: number | undefined): string | null {
-  if (km === undefined) return null;
-  if (km < 1) return 'Меньше 1 км от вас';
-  return `~${Math.round(km)} км от вас`;
-}
-
-const SOBRIETY_LABEL: Record<SobrietyStatus, string> = {
-  trezv: 'В чистоте',
-  v_sryve: 'Нужна помощь',
-  ne_ukazano: 'Не скажу',
-};
 
 const SOBRIETY_FILTER_OPTIONS: { value: SobrietyStatus | 'any'; label: string }[] = [
   { value: 'any', label: 'Любой' },
@@ -80,12 +61,6 @@ const DISTANCE_OPTIONS: { value: 'any' | '5'; label: string }[] = [
 ];
 
 const AUTO_REFRESH_MS = 60_000;
-
-function calcAge(birthDate: string | null): number | null {
-  if (!birthDate) return null;
-  const diff = Date.now() - new Date(birthDate).getTime();
-  return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
-}
 
 type Filters = {
   city: string;

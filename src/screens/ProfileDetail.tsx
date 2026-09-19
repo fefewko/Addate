@@ -14,22 +14,7 @@ import {
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { likeProfile } from '../lib/matches';
-
-const SOBRIETY_LABEL: Record<string, string> = {
-  trezv: 'Чист(а)',
-  v_sryve: 'Всё сложно',
-  ne_ukazano: 'Статус не указан',
-};
-
-const SUBSTANCE_LABEL: Record<string, string> = {
-  alcohol: 'Алкоголь',
-  opioids: 'Опиоиды',
-  stimulants: 'Стимуляторы',
-  cannabis: 'Каннабис',
-  other: 'Другое',
-};
-
-const ONLINE_THRESHOLD_MS = 3 * 60 * 1000; // 3 минуты — с запасом от heartbeat раз в 45с
+import { SOBRIETY_LABEL, SUBSTANCE_LABEL, SobrietyStatus, calcAge, isOnline } from '../lib/profileDisplay';
 
 type FullProfile = {
   id: string;
@@ -39,23 +24,12 @@ type FullProfile = {
   bio: string | null;
   height_cm: number | null;
   weight_kg: number | null;
-  sobriety_status: 'trezv' | 'v_sryve' | 'ne_ukazano';
+  sobriety_status: SobrietyStatus;
   substance_type: string[] | null;
   photo_url: string | null;
   additional_photos: string[] | null;
   last_seen_at: string | null;
 };
-
-function calcAge(birthDate: string | null): number | null {
-  if (!birthDate) return null;
-  const diff = Date.now() - new Date(birthDate).getTime();
-  return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
-}
-
-function isOnline(lastSeenAt: string | null): boolean {
-  if (!lastSeenAt) return false;
-  return Date.now() - new Date(lastSeenAt).getTime() < ONLINE_THRESHOLD_MS;
-}
 
 const screenWidth = Dimensions.get('window').width;
 

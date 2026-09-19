@@ -22,9 +22,9 @@ import { supabase } from '../lib/supabase';
 type SobrietyStatus = 'trezv' | 'v_sryve' | 'ne_ukazano';
 
 const SOBRIETY_OPTIONS: { value: SobrietyStatus; label: string }[] = [
-  { value: 'trezv', label: 'Трезв(а)' },
-  { value: 'v_sryve', label: 'Сейчас непросто' },
-  { value: 'ne_ukazano', label: 'Не указывать' },
+  { value: 'trezv', label: 'В чистоте' },
+  { value: 'v_sryve', label: 'Нужна помощь' },
+  { value: 'ne_ukazano', label: 'Не скажу' },
 ];
 
 const SUBSTANCE_OPTIONS = [

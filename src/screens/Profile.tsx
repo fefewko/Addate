@@ -23,9 +23,9 @@ const screenWidth = Dimensions.get('window').width;
 type SobrietyStatus = 'trezv' | 'v_sryve' | 'ne_ukazano';
 
 const SOBRIETY_OPTIONS: { value: SobrietyStatus; label: string }[] = [
-  { value: 'trezv', label: 'Чист(а)' },
-  { value: 'v_sryve', label: 'Всё сложно' },
-  { value: 'ne_ukazano', label: 'Не указывать' },
+  { value: 'trezv', label: 'В чистоте' },
+  { value: 'v_sryve', label: 'Нужна помощь' },
+  { value: 'ne_ukazano', label: 'Не скажу' },
 ];
 
 const SUBSTANCE_OPTIONS = [
