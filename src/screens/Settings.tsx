@@ -38,6 +38,11 @@ export default function Settings() {
     setUpdatingLocation(false);
   }
 
+  async function handleSignOut() {
+    await supabase.auth.signOut();
+    navigation.reset({ index: 0, routes: [{ name: 'SignIn' }] });
+  }
+
   async function handleDeleteProfile() {
     const {
       data: { user },
@@ -102,6 +107,11 @@ export default function Settings() {
         <Text style={styles.actionText}>Написать в поддержку</Text>
       </TouchableOpacity>
 
+      <Text style={styles.sectionTitle}>Аккаунт</Text>
+      <TouchableOpacity style={styles.actionRow} onPress={handleSignOut}>
+        <Text style={styles.signOutText}>Выйти из аккаунта</Text>
+      </TouchableOpacity>
+
       <Text style={styles.sectionTitle}>Опасная зона</Text>
       <TouchableOpacity style={styles.dangerRow} onPress={handleDeleteProfile}>
         <Text style={styles.dangerText}>Удалить анкету</Text>
@@ -134,6 +144,7 @@ const styles = StyleSheet.create({
   rowValue: { color: '#a0a0a5', fontSize: 14 },
   actionRow: { backgroundColor: '#1c1c1e', borderRadius: 10, padding: 14, marginBottom: 8 },
   actionText: { color: '#3b82f6', fontSize: 14, fontWeight: '600' },
+  signOutText: { color: '#a0a0a5', fontSize: 14, fontWeight: '600', textAlign: 'center' },
   hint: { color: '#8a8a8e', fontSize: 12, marginBottom: 8 },
   dangerRow: {
     backgroundColor: '#1c1c1e',
