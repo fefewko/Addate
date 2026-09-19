@@ -1,10 +1,11 @@
 // src/screens/Settings.tsx
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Switch, Alert, ScrollView, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Switch, Alert, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
 import { supabase } from '../lib/supabase';
+import { openSupportChat } from '../lib/support';
 
 export default function Settings() {
   const navigation = useNavigation<any>();
@@ -96,7 +97,7 @@ export default function Settings() {
       </View>
       <TouchableOpacity
         style={styles.actionRow}
-        onPress={() => Linking.openURL('mailto:support@addate.ru')}
+        onPress={() => openSupportChat(navigation)}
       >
         <Text style={styles.actionText}>Написать в поддержку</Text>
       </TouchableOpacity>
