@@ -17,6 +17,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '../lib/supabase';
+import { uploadAvatarPhoto } from '../lib/avatarUpload';
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -131,23 +132,6 @@ export default function Profile() {
     );
   }
 
-  async function uploadImage(uri: string, fileName: string): Promise<string | null> {
-    const response = await fetch(uri);
-    const arrayBuffer = await response.arrayBuffer();
-    const fileExt = uri.split('.').pop() || 'jpg';
-    const filePath = `${userId}/${fileName}.${fileExt}`;
-
-    const { error } = await supabase.storage
-      .from('avatars')
-      .upload(filePath, arrayBuffer, { contentType: `image/${fileExt}`, upsert: true });
-
-    if (error) throw new Error(error.message);
-
-    const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
-    // добавляем метку времени, чтобы избежать кэширования старой фотографии по тому же пути
-    return `${data.publicUrl}?t=${Date.now()}`;
-  }
-
   async function handleChangeMainPhoto() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
@@ -166,7 +150,7 @@ export default function Profile() {
 
     setUploadingPhoto(true);
     try {
-      const url = await uploadImage(result.assets[0].uri, 'avatar');
+      const url = await uploadAvatarPhoto(userId, result.assets[0].uri, 'avatar');
       if (url) {
         await supabase.from('profiles').update({ photo_url: url }).eq('id', userId);
         setPhotoUrl(url);
@@ -201,7 +185,7 @@ export default function Profile() {
     setUploadingPhoto(true);
     try {
       const fileName = `extra_${Date.now()}`;
-      const url = await uploadImage(result.assets[0].uri, fileName);
+      const url = await uploadAvatarPhoto(userId, result.assets[0].uri, fileName);
       if (url) {
         const updated = [...additionalPhotos, url];
         await supabase.from('profiles').update({ additional_photos: updated }).eq('id', userId);

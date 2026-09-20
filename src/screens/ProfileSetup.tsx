@@ -18,6 +18,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../lib/supabase';
+import { uploadAvatarPhoto } from '../lib/avatarUpload';
 
 type SobrietyStatus = 'trezv' | 'v_sryve' | 'ne_ukazano';
 
@@ -112,25 +113,7 @@ export default function ProfileSetup() {
 
   async function uploadPhoto(userId: string): Promise<string | null> {
     if (!photoUri) return null;
-
-    const response = await fetch(photoUri);
-    const arrayBuffer = await response.arrayBuffer();
-    const fileExt = photoUri.split('.').pop() || 'jpg';
-    const filePath = `${userId}/avatar.${fileExt}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('avatars')
-      .upload(filePath, arrayBuffer, {
-        contentType: `image/${fileExt}`,
-        upsert: true,
-      });
-
-    if (uploadError) {
-      throw new Error(uploadError.message);
-    }
-
-    const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
-    return data.publicUrl;
+    return uploadAvatarPhoto(userId, photoUri, 'avatar');
   }
 
   async function handleSave() {

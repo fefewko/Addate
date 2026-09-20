@@ -9,7 +9,6 @@ import {
   StyleSheet,
   ActivityIndicator,
   Dimensions,
-  Alert,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
