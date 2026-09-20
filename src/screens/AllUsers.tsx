@@ -24,6 +24,7 @@ import { uploadChatImage, getSignedChatImageUrls } from '../lib/chatImages';
 import { likeProfile } from '../lib/matches';
 import { supabase } from '../lib/supabase';
 import { SOBRIETY_LABEL, SobrietyStatus, calcAge, isOnline, formatDistance } from '../lib/profileDisplay';
+import { colors } from '../lib/theme';
 
 type Profile = {
   id: string;
@@ -188,16 +189,16 @@ function AgeRangeSlider({
 
 const sliderStyles = StyleSheet.create({
   track: { height: THUMB_SIZE, justifyContent: 'center', marginTop: 8, marginBottom: 4 },
-  rail: { position: 'absolute', left: 0, right: 0, height: 4, borderRadius: 2, backgroundColor: '#2a2a2a' },
-  fill: { position: 'absolute', height: 4, borderRadius: 2, backgroundColor: '#3b82f6' },
+  rail: { position: 'absolute', left: 0, right: 0, height: 4, borderRadius: 2, backgroundColor: colors.border },
+  fill: { position: 'absolute', height: 4, borderRadius: 2, backgroundColor: colors.accent },
   thumb: {
     position: 'absolute',
     width: THUMB_SIZE,
     height: THUMB_SIZE,
     borderRadius: THUMB_SIZE / 2,
-    backgroundColor: '#3b82f6',
+    backgroundColor: colors.accent,
     borderWidth: 2,
-    borderColor: '#f0f0f0',
+    borderColor: colors.textPrimary,
   },
 });
 
@@ -334,13 +335,13 @@ function QuickChatModal({
         <View style={styles.quickChatHeader}>
           <Text style={styles.quickChatTitle}>{otherName || 'Чат'}</Text>
           <TouchableOpacity onPress={onClose} style={{ padding: 4 }}>
-            <Ionicons name="close" size={26} color="#f0f0f0" />
+            <Ionicons name="close" size={26} color={colors.textPrimary} />
           </TouchableOpacity>
         </View>
 
         {loading ? (
           <View style={styles.center}>
-            <ActivityIndicator size="large" color="#3b82f6" />
+            <ActivityIndicator size="large" color={colors.accent} />
           </View>
         ) : (
           <FlatList
@@ -362,7 +363,7 @@ function QuickChatModal({
                       </TouchableOpacity>
                     ) : (
                       <View style={[styles.chatImage, styles.chatImageLoading]}>
-                        <ActivityIndicator color="#fff" />
+                        <ActivityIndicator color={colors.white} />
                       </View>
                     )}
                   </View>
@@ -381,15 +382,15 @@ function QuickChatModal({
         <View style={[styles.quickChatInputRow, { paddingBottom: Math.max(insets.bottom, 10) }]}>
           <TouchableOpacity style={styles.attachButton} onPress={handlePickImage} disabled={uploadingImage}>
             {uploadingImage ? (
-              <ActivityIndicator color="#8a8a8e" size="small" />
+              <ActivityIndicator color={colors.textFaint} size="small" />
             ) : (
-              <Ionicons name="image-outline" size={24} color="#8a8a8e" />
+              <Ionicons name="image-outline" size={24} color={colors.textFaint} />
             )}
           </TouchableOpacity>
           <TextInput
             style={styles.quickChatInput}
             placeholder="Сообщение..."
-            placeholderTextColor="#8a8a8e"
+            placeholderTextColor={colors.textFaint}
             value={text}
             onChangeText={setText}
             multiline
@@ -407,7 +408,7 @@ function QuickChatModal({
       <Modal visible={!!previewUrl} transparent animationType="fade" onRequestClose={() => setPreviewUrl(null)}>
         <View style={styles.previewOverlay}>
           <TouchableOpacity style={styles.previewClose} onPress={() => setPreviewUrl(null)}>
-            <Ionicons name="close" size={30} color="#fff" />
+            <Ionicons name="close" size={30} color={colors.white} />
           </TouchableOpacity>
           {previewUrl && <Image source={{ uri: previewUrl }} style={styles.previewImage} resizeMode="contain" />}
         </View>
@@ -511,7 +512,7 @@ export default function AllUsers() {
       headerRight: () => (
         <View style={{ flexDirection: 'row' }}>
           <TouchableOpacity onPress={loadAll} style={{ paddingHorizontal: 10 }}>
-            <Ionicons name="refresh" size={22} color="#f0f0f0" />
+            <Ionicons name="refresh" size={22} color={colors.textPrimary} />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => {
@@ -520,7 +521,7 @@ export default function AllUsers() {
             }}
             style={{ paddingHorizontal: 10 }}
           >
-            <Ionicons name="filter" size={22} color="#f0f0f0" />
+            <Ionicons name="filter" size={22} color={colors.textPrimary} />
           </TouchableOpacity>
         </View>
       ),
@@ -604,13 +605,13 @@ export default function AllUsers() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#3b82f6" />
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#121212' }}>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
       {activeFilterCount > 0 && (
         <View style={styles.filterBar}>
           <Text style={styles.filterBarText}>Фильтры применены ({activeFilterCount})</Text>
@@ -669,12 +670,12 @@ export default function AllUsers() {
                       disabled={busy || match?.status === 'pending'}
                     >
                       {busy ? (
-                        <ActivityIndicator color="#fff" size="small" />
+                        <ActivityIndicator color={colors.white} size="small" />
                       ) : (
                         <Ionicons
                           name={match?.status === 'matched' ? 'checkmark-done' : match ? 'checkmark' : 'close'}
                           size={16}
-                          color="#fff"
+                          color={colors.white}
                         />
                       )}
                     </TouchableOpacity>
@@ -689,7 +690,7 @@ export default function AllUsers() {
                       <View
                         style={[
                           styles.onlineDot,
-                          { backgroundColor: isOnline(profile.last_seen_at) ? '#4ade80' : '#5a5a5e' },
+                          { backgroundColor: isOnline(profile.last_seen_at) ? colors.success : colors.offline },
                         ]}
                       />
                     </View>
@@ -729,7 +730,7 @@ export default function AllUsers() {
               <TextInput
                 style={styles.cityInput}
                 placeholder="Например, Москва"
-                placeholderTextColor="#8a8a8e"
+                placeholderTextColor={colors.textFaint}
                 value={draftFilters.city}
                 onChangeText={(v) => setDraftFilters((p) => ({ ...p, city: v }))}
               />
@@ -802,24 +803,24 @@ export default function AllUsers() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: '#121212' },
-  emptyTitle: { fontSize: 18, fontWeight: '600', marginBottom: 8, color: '#f0f0f0' },
-  emptyBody: { fontSize: 14, color: '#a0a0a5', marginBottom: 16, textAlign: 'center' },
-  refreshButton: { backgroundColor: '#3b82f6', borderRadius: 8, paddingVertical: 12, paddingHorizontal: 24 },
-  refreshButtonText: { color: '#fff', fontWeight: '600' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: colors.bg },
+  emptyTitle: { fontSize: 18, fontWeight: '600', marginBottom: 8, color: colors.textPrimary },
+  emptyBody: { fontSize: 14, color: colors.textSecondary, marginBottom: 16, textAlign: 'center' },
+  refreshButton: { backgroundColor: colors.accent, borderRadius: 8, paddingVertical: 12, paddingHorizontal: 24 },
+  refreshButtonText: { color: colors.white, fontWeight: '600' },
   filterBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 10,
-    backgroundColor: '#1c1c1e',
+    backgroundColor: colors.surface,
   },
-  filterBarText: { color: '#a0a0a5', fontSize: 13 },
-  filterBarReset: { color: '#3b82f6', fontSize: 13, fontWeight: '600' },
+  filterBarText: { color: colors.textSecondary, fontSize: 13 },
+  filterBarReset: { color: colors.accent, fontSize: 13, fontWeight: '600' },
   list: {
     padding: 12,
-    backgroundColor: '#121212',
+    backgroundColor: colors.bg,
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
@@ -827,15 +828,15 @@ const styles = StyleSheet.create({
   card: {
     width: '48.5%',
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: colors.border,
     borderRadius: 12,
     marginBottom: 12,
     overflow: 'hidden',
   },
-  photo: { width: '100%', height: 140, backgroundColor: '#1c1c1e' },
+  photo: { width: '100%', height: 140, backgroundColor: colors.surface },
   photoWrap: { position: 'relative' },
   photoPlaceholder: { alignItems: 'center', justifyContent: 'center' },
-  photoPlaceholderText: { color: '#8a8a8e', fontSize: 12 },
+  photoPlaceholderText: { color: colors.textFaint, fontSize: 12 },
   statusBadge: {
     position: 'absolute',
     top: 8,
@@ -850,48 +851,48 @@ const styles = StyleSheet.create({
   statusBadgeSent: { backgroundColor: 'rgba(59,130,246,0.9)' },
   statusBadgeMatched: { backgroundColor: 'rgba(34,197,94,0.9)' },
   cardBody: { padding: 10 },
-  name: { fontSize: 14, fontWeight: '600', marginBottom: 2, color: '#f0f0f0' },
+  name: { fontSize: 14, fontWeight: '600', marginBottom: 2, color: colors.textPrimary },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   onlineDot: { width: 7, height: 7, borderRadius: 4, marginBottom: 2 },
-  city: { fontSize: 12, color: '#a0a0a5', marginBottom: 2 },
-  distance: { fontSize: 11, color: '#a0a0a5', marginBottom: 2, fontStyle: 'italic' },
-  sobriety: { fontSize: 11, color: '#3b82f6', fontWeight: '600', marginBottom: 4 },
-  bio: { fontSize: 12, color: '#f0f0f0', lineHeight: 16 },
+  city: { fontSize: 12, color: colors.textSecondary, marginBottom: 2 },
+  distance: { fontSize: 11, color: colors.textSecondary, marginBottom: 2, fontStyle: 'italic' },
+  sobriety: { fontSize: 11, color: colors.accent, fontWeight: '600', marginBottom: 4 },
+  bio: { fontSize: 12, color: colors.textPrimary, lineHeight: 16 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalSheet: { backgroundColor: '#121212', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '85%' },
+  modalSheet: { backgroundColor: colors.bg, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '85%' },
   modalContent: { padding: 20, paddingBottom: 40 },
-  modalTitle: { fontSize: 20, fontWeight: '700', color: '#f0f0f0', marginBottom: 16 },
-  filterLabel: { fontSize: 14, fontWeight: '600', color: '#f0f0f0', marginTop: 18, marginBottom: 8 },
+  modalTitle: { fontSize: 20, fontWeight: '700', color: colors.textPrimary, marginBottom: 16 },
+  filterLabel: { fontSize: 14, fontWeight: '600', color: colors.textPrimary, marginTop: 18, marginBottom: 8 },
   cityInput: {
-    backgroundColor: '#1c1c1e',
-    color: '#f0f0f0',
+    backgroundColor: colors.surface,
+    color: colors.textPrimary,
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: colors.border,
     borderRadius: 8,
     padding: 12,
     fontSize: 15,
   },
   optionRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: '#9a9a9e', marginRight: 10 },
-  radioSelected: { borderColor: '#3b82f6', backgroundColor: '#3b82f6' },
+  radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: colors.textMuted, marginRight: 10 },
+  radioSelected: { borderColor: colors.accent, backgroundColor: colors.accent },
   checkbox: {
     width: 20,
     height: 20,
     borderRadius: 4,
     borderWidth: 1.5,
-    borderColor: '#9a9a9e',
+    borderColor: colors.textMuted,
     marginRight: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkboxChecked: { backgroundColor: '#3b82f6', borderColor: '#3b82f6' },
-  checkboxMark: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  optionLabel: { fontSize: 15, color: '#f0f0f0' },
-  applyButton: { backgroundColor: '#3b82f6', borderRadius: 10, padding: 16, alignItems: 'center', marginTop: 24 },
-  applyButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  checkboxChecked: { backgroundColor: colors.accent, borderColor: colors.accent },
+  checkboxMark: { color: colors.white, fontSize: 12, fontWeight: '700' },
+  optionLabel: { fontSize: 15, color: colors.textPrimary },
+  applyButton: { backgroundColor: colors.accent, borderRadius: 10, padding: 16, alignItems: 'center', marginTop: 24 },
+  applyButtonText: { color: colors.white, fontSize: 16, fontWeight: '600' },
   resetLink: { padding: 14, alignItems: 'center' },
-  resetLinkText: { color: '#a0a0a5', fontSize: 14 },
-  quickChatContainer: { flex: 1, backgroundColor: '#121212' },
+  resetLinkText: { color: colors.textSecondary, fontSize: 14 },
+  quickChatContainer: { flex: 1, backgroundColor: colors.bg },
   quickChatHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -899,28 +900,28 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingTop: 50,
     borderBottomWidth: 1,
-    borderBottomColor: '#2a2a2a',
+    borderBottomColor: colors.border,
   },
-  quickChatTitle: { fontSize: 18, fontWeight: '700', color: '#f0f0f0' },
+  quickChatTitle: { fontSize: 18, fontWeight: '700', color: colors.textPrimary },
   quickChatList: { padding: 14, flexGrow: 1 },
   bubble: { maxWidth: '78%', borderRadius: 14, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 8 },
-  bubbleMine: { backgroundColor: '#3b82f6', alignSelf: 'flex-end' },
-  bubbleTheirs: { backgroundColor: '#2a2a2a', alignSelf: 'flex-start' },
-  bubbleTextMine: { color: '#fff', fontSize: 15 },
-  bubbleTextTheirs: { color: '#f0f0f0', fontSize: 15 },
+  bubbleMine: { backgroundColor: colors.accent, alignSelf: 'flex-end' },
+  bubbleTheirs: { backgroundColor: colors.border, alignSelf: 'flex-start' },
+  bubbleTextMine: { color: colors.white, fontSize: 15 },
+  bubbleTextTheirs: { color: colors.textPrimary, fontSize: 15 },
   quickChatInputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     padding: 10,
     borderTopWidth: 1,
-    borderTopColor: '#2a2a2a',
+    borderTopColor: colors.border,
   },
   quickChatInput: {
     flex: 1,
-    backgroundColor: '#1c1c1e',
-    color: '#f0f0f0',
+    backgroundColor: colors.surface,
+    color: colors.textPrimary,
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: colors.border,
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -928,11 +929,11 @@ const styles = StyleSheet.create({
     maxHeight: 100,
     fontSize: 15,
   },
-  quickChatSend: { backgroundColor: '#3b82f6', borderRadius: 18, paddingHorizontal: 16, paddingVertical: 10 },
-  quickChatSendText: { color: '#fff', fontWeight: '600' },
+  quickChatSend: { backgroundColor: colors.accent, borderRadius: 18, paddingHorizontal: 16, paddingVertical: 10 },
+  quickChatSendText: { color: colors.white, fontWeight: '600' },
   buttonDisabledOpacity: { opacity: 0.5 },
   imageBubble: { padding: 4 },
-  chatImage: { width: 200, height: 200, borderRadius: 10, backgroundColor: '#1c1c1e' },
+  chatImage: { width: 200, height: 200, borderRadius: 10, backgroundColor: colors.surface },
   chatImageLoading: { alignItems: 'center', justifyContent: 'center' },
   attachButton: { padding: 8, marginRight: 4, marginBottom: 2 },
   previewOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center' },

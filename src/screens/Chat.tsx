@@ -21,6 +21,7 @@ import * as ImagePicker from 'expo-image-picker';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '../lib/supabase';
 import { uploadChatImage, getSignedChatImageUrls } from '../lib/chatImages';
+import { colors } from '../lib/theme';
 
 type Message = {
   id: string;
@@ -294,7 +295,7 @@ export default function Chat() {
                   </TouchableOpacity>
                 ) : (
                   <View style={[styles.chatImage, styles.chatImageLoading]}>
-                    <ActivityIndicator color="#fff" />
+                    <ActivityIndicator color={colors.white} />
                   </View>
                 )}
               </View>
@@ -314,14 +315,14 @@ export default function Chat() {
       <View style={[styles.inputRow, { paddingBottom: Math.max(insets.bottom, 10) }]}>
         <TouchableOpacity style={styles.attachButton} onPress={handlePickImage} disabled={uploadingImage}>
           {uploadingImage ? (
-            <ActivityIndicator color="#8a8a8e" size="small" />
+            <ActivityIndicator color={colors.textFaint} size="small" />
           ) : (
-            <Ionicons name="image-outline" size={24} color="#8a8a8e" />
+            <Ionicons name="image-outline" size={24} color={colors.textFaint} />
           )}
         </TouchableOpacity>
         <TextInput
           style={styles.input}
-          placeholderTextColor="#8a8a8e"
+          placeholderTextColor={colors.textFaint}
           placeholder="Сообщение..."
           value={text}
           onChangeText={setText}
@@ -339,7 +340,7 @@ export default function Chat() {
       <Modal visible={!!previewUrl} transparent animationType="fade" onRequestClose={() => setPreviewUrl(null)}>
         <View style={styles.previewOverlay}>
           <TouchableOpacity style={styles.previewClose} onPress={() => setPreviewUrl(null)}>
-            <Ionicons name="close" size={30} color="#fff" />
+            <Ionicons name="close" size={30} color={colors.white} />
           </TouchableOpacity>
           {previewUrl && (
             <Image source={{ uri: previewUrl }} style={styles.previewImage} resizeMode="contain" />
@@ -351,40 +352,40 @@ export default function Chat() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#121212' },
+  container: { flex: 1, backgroundColor: colors.bg },
   header: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
     padding: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#2a2a2a',
+    borderBottomColor: colors.border,
   },
   headerButton: { marginLeft: 16 },
-  headerButtonText: { fontSize: 13, color: '#a0a0a5' },
-  blockText: { color: '#f87171' },
+  headerButtonText: { fontSize: 13, color: colors.textSecondary },
+  blockText: { color: colors.danger },
   messageList: { padding: 14, flexGrow: 1 },
   bubble: { maxWidth: '78%', borderRadius: 14, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 8 },
   imageBubble: { padding: 4 },
-  bubbleMine: { backgroundColor: '#3b82f6', alignSelf: 'flex-end' },
-  bubbleTheirs: { backgroundColor: '#2a2a2a', alignSelf: 'flex-start' },
-  bubbleTextMine: { color: '#fff', fontSize: 15 },
-  bubbleTextTheirs: { color: '#f0f0f0', fontSize: 15 },
-  chatImage: { width: 200, height: 200, borderRadius: 10, backgroundColor: '#1c1c1e' },
+  bubbleMine: { backgroundColor: colors.accent, alignSelf: 'flex-end' },
+  bubbleTheirs: { backgroundColor: colors.border, alignSelf: 'flex-start' },
+  bubbleTextMine: { color: colors.white, fontSize: 15 },
+  bubbleTextTheirs: { color: colors.textPrimary, fontSize: 15 },
+  chatImage: { width: 200, height: 200, borderRadius: 10, backgroundColor: colors.surface },
   chatImageLoading: { alignItems: 'center', justifyContent: 'center' },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     padding: 10,
     borderTopWidth: 1,
-    borderTopColor: '#2a2a2a',
+    borderTopColor: colors.border,
   },
   attachButton: { padding: 8, marginRight: 4, marginBottom: 2 },
   input: {
-    backgroundColor: '#1c1c1e',
-    color: '#f0f0f0',
+    backgroundColor: colors.surface,
+    color: colors.textPrimary,
     flex: 1,
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: colors.border,
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -392,9 +393,9 @@ const styles = StyleSheet.create({
     maxHeight: 100,
     fontSize: 15,
   },
-  sendButton: { backgroundColor: '#3b82f6', borderRadius: 18, paddingHorizontal: 16, paddingVertical: 10 },
+  sendButton: { backgroundColor: colors.accent, borderRadius: 18, paddingHorizontal: 16, paddingVertical: 10 },
   sendButtonDisabled: { opacity: 0.5 },
-  sendButtonText: { color: '#fff', fontWeight: '600' },
+  sendButtonText: { color: colors.white, fontWeight: '600' },
   previewOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center' },
   previewClose: {
     position: 'absolute',

@@ -619,6 +619,40 @@ ALTER TABLE ONLY public.telegram_identities
 -- Name: support_messages Allow insert access to ticket owner or admin; Type: POLICY; Schema: public; Owner: -
 --
 
+-- Admin helper (must exist before policies)
+CREATE SCHEMA IF NOT EXISTS private;
+CREATE OR REPLACE FUNCTION private.is_admin()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO '';
+AS $$
+  select exists (
+    select 1
+    from public.profiles p
+    where p.id = (select auth.uid())
+      and p.is_admin = true
+  );
+$$;
+
+-- Admin helper (must exist before policies)
+CREATE SCHEMA IF NOT EXISTS private;
+CREATE OR REPLACE FUNCTION private.is_admin()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO '';
+AS $$
+  select exists (
+    select 1
+    from public.profiles p
+    where p.id = (select auth.uid())
+      and p.is_admin = true
+  );
+$$;
+
 CREATE POLICY "Allow insert access to ticket owner or admin" ON public.support_messages FOR INSERT TO authenticated WITH CHECK ((EXISTS ( SELECT 1
    FROM (public.support_tickets st
      LEFT JOIN public.profiles p ON ((p.id = auth.uid())))

@@ -6,6 +6,7 @@ import * as Location from 'expo-location';
 import Constants from 'expo-constants';
 import { supabase } from '../lib/supabase';
 import { openSupportChat } from '../lib/support';
+import { colors } from '../lib/theme';
 
 export default function Settings() {
   const navigation = useNavigation<any>();
@@ -81,7 +82,7 @@ export default function Settings() {
         <Switch
           value={notificationsEnabled}
           onValueChange={setNotificationsEnabled}
-          trackColor={{ false: '#2a2a2a', true: '#3b82f6' }}
+          trackColor={{ false: colors.border, true: colors.accent }}
         />
       </View>
 
@@ -121,12 +122,12 @@ export default function Settings() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#121212' },
+  container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: 20, paddingBottom: 60 },
   sectionTitle: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#8a8a8e',
+    color: colors.textFaint,
     textTransform: 'uppercase',
     marginTop: 24,
     marginBottom: 10,
@@ -135,24 +136,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#1c1c1e',
+    backgroundColor: colors.surface,
     borderRadius: 10,
     padding: 14,
     marginBottom: 8,
   },
-  rowLabel: { color: '#f0f0f0', fontSize: 14, flex: 1, marginRight: 12 },
-  rowValue: { color: '#a0a0a5', fontSize: 14 },
-  actionRow: { backgroundColor: '#1c1c1e', borderRadius: 10, padding: 14, marginBottom: 8 },
-  actionText: { color: '#3b82f6', fontSize: 14, fontWeight: '600' },
-  signOutText: { color: '#a0a0a5', fontSize: 14, fontWeight: '600', textAlign: 'center' },
-  hint: { color: '#8a8a8e', fontSize: 12, marginBottom: 8 },
+  rowLabel: { color: colors.textPrimary, fontSize: 14, flex: 1, marginRight: 12 },
+  rowValue: { color: colors.textSecondary, fontSize: 14 },
+  actionRow: { backgroundColor: colors.surface, borderRadius: 10, padding: 14, marginBottom: 8 },
+  actionText: { color: colors.accent, fontSize: 14, fontWeight: '600' },
+  signOutText: { color: colors.textSecondary, fontSize: 14, fontWeight: '600', textAlign: 'center' },
+  hint: { color: colors.textFaint, fontSize: 12, marginBottom: 8 },
   dangerRow: {
-    backgroundColor: '#1c1c1e',
+    backgroundColor: colors.surface,
     borderRadius: 10,
     padding: 14,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#3a1d1d',
+    borderColor: colors.dangerBg,
   },
-  dangerText: { color: '#f87171', fontSize: 14, fontWeight: '600', textAlign: 'center' },
+  dangerText: { color: colors.danger, fontSize: 14, fontWeight: '600', textAlign: 'center' },
 });

@@ -14,6 +14,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { loginWithTelegram } from '../lib/telegramAuth';
+import { colors } from '../lib/theme';
 
 // Вход через Telegram временно скрыт из интерфейса — код и серверная часть
 // остаются рабочими, доделаем и включим позже. Чтобы вернуть кнопку — просто true.
@@ -146,7 +147,7 @@ export default function SignIn() {
       <Text style={styles.label}>Email</Text>
       <TextInput
         style={styles.input}
-        placeholderTextColor="#8a8a8e"
+        placeholderTextColor={colors.textFaint}
         placeholder="you@example.com"
         autoCapitalize="none"
         keyboardType="email-address"
@@ -157,7 +158,7 @@ export default function SignIn() {
       <Text style={styles.label}>Пароль</Text>
       <TextInput
         style={styles.input}
-        placeholderTextColor="#8a8a8e"
+        placeholderTextColor={colors.textFaint}
         placeholder="Ваш пароль"
         secureTextEntry
         value={password}
@@ -172,7 +173,7 @@ export default function SignIn() {
         disabled={loading}
       >
         {loading ? (
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color={colors.white} />
         ) : (
           <Text style={styles.buttonText}>Войти</Text>
         )}
@@ -196,7 +197,7 @@ export default function SignIn() {
             disabled={telegramLoading || loading}
           >
             {telegramLoading ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color={colors.white} />
             ) : (
               <Text style={styles.buttonText}>Войти через Telegram</Text>
             )}
@@ -212,33 +213,33 @@ export default function SignIn() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: '#121212' },
-  title: { fontSize: 24, fontWeight: '600', marginBottom: 24, textAlign: 'center', color: '#f0f0f0' },
-  label: { fontSize: 13, fontWeight: '600', color: '#a0a0a5', marginBottom: 6, marginLeft: 2 },
+  container: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: colors.bg },
+  title: { fontSize: 24, fontWeight: '600', marginBottom: 24, textAlign: 'center', color: colors.textPrimary },
+  label: { fontSize: 13, fontWeight: '600', color: colors.textSecondary, marginBottom: 6, marginLeft: 2 },
   input: {
-    backgroundColor: '#1c1c1e',
-    color: '#f0f0f0',
+    backgroundColor: colors.surface,
+    color: colors.textPrimary,
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: colors.border,
     borderRadius: 8,
     padding: 14,
     marginBottom: 12,
     fontSize: 16,
   },
-  error: { color: '#f87171', marginBottom: 12, fontSize: 14 },
+  error: { color: colors.danger, marginBottom: 12, fontSize: 14 },
   button: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: colors.accent,
     borderRadius: 8,
     padding: 16,
     alignItems: 'center',
     marginTop: 8,
   },
   buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  link: { textAlign: 'center', marginTop: 16, color: '#3b82f6', fontSize: 14 },
+  buttonText: { color: colors.white, fontSize: 16, fontWeight: '600' },
+  link: { textAlign: 'center', marginTop: 16, color: colors.accent, fontSize: 14 },
   divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 20 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: '#2a2a2a' },
-  dividerText: { color: '#8a8a8e', fontSize: 13, marginHorizontal: 12 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
+  dividerText: { color: colors.textFaint, fontSize: 13, marginHorizontal: 12 },
   telegramButton: {
     backgroundColor: '#229ED9',
     borderRadius: 8,

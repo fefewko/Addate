@@ -3,6 +3,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
+import { colors } from '../lib/theme';
 
 type Status = 'pending' | 'approved' | 'rejected';
 
@@ -104,7 +105,7 @@ export default function ModerationPending() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#3b82f6" />
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
@@ -144,29 +145,29 @@ export default function ModerationPending() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: '#121212' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#121212' },
-  title: { fontSize: 22, fontWeight: '600', marginBottom: 12, textAlign: 'center', color: '#f0f0f0' },
-  body: { fontSize: 15, color: '#c7c7cc', textAlign: 'center', marginBottom: 24, lineHeight: 22 },
-  noteBox: { backgroundColor: '#3a1d1d', borderRadius: 8, padding: 14, marginBottom: 20 },
-  noteLabel: { fontSize: 13, fontWeight: '600', color: '#fca5a5', marginBottom: 4 },
-  noteText: { fontSize: 14, color: '#fca5a5' },
+  container: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: colors.bg },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg },
+  title: { fontSize: 22, fontWeight: '600', marginBottom: 12, textAlign: 'center', color: colors.textPrimary },
+  body: { fontSize: 15, color: colors.textLight, textAlign: 'center', marginBottom: 24, lineHeight: 22 },
+  noteBox: { backgroundColor: colors.dangerBg, borderRadius: 8, padding: 14, marginBottom: 20 },
+  noteLabel: { fontSize: 13, fontWeight: '600', color: colors.dangerLight, marginBottom: 4 },
+  noteText: { fontSize: 14, color: colors.dangerLight },
   button: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: colors.accent,
     borderRadius: 8,
     padding: 16,
     alignItems: 'center',
     marginBottom: 12,
   },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  buttonText: { color: colors.white, fontSize: 16, fontWeight: '600' },
   secondaryButton: {
     borderWidth: 1,
-    borderColor: '#3b82f6',
+    borderColor: colors.accent,
     borderRadius: 8,
     padding: 16,
     alignItems: 'center',
     marginBottom: 20,
   },
-  secondaryButtonText: { color: '#3b82f6', fontSize: 16, fontWeight: '600' },
-  signOut: { textAlign: 'center', color: '#9a9a9e', fontSize: 14 },
+  secondaryButtonText: { color: colors.accent, fontSize: 16, fontWeight: '600' },
+  signOut: { textAlign: 'center', color: colors.textMuted, fontSize: 14 },
 });

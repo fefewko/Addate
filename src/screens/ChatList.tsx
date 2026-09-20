@@ -11,6 +11,7 @@ import {
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { calcAge } from '../lib/profileDisplay';
+import { colors } from '../lib/theme';
 
 type MatchRow = {
   id: string;
@@ -130,7 +131,7 @@ export default function ChatList() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#3b82f6" />
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
@@ -187,22 +188,22 @@ export default function ChatList() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#121212' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: '#121212' },
-  emptyTitle: { fontSize: 18, fontWeight: '600', marginBottom: 8, color: '#f0f0f0' },
-  emptyBody: { fontSize: 14, color: '#a0a0a5', textAlign: 'center' },
+  container: { flex: 1, backgroundColor: colors.bg },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: colors.bg },
+  emptyTitle: { fontSize: 18, fontWeight: '600', marginBottom: 8, color: colors.textPrimary },
+  emptyBody: { fontSize: 14, color: colors.textSecondary, textAlign: 'center' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#2a2a2a',
+    borderBottomColor: colors.border,
   },
-  avatar: { width: 52, height: 52, borderRadius: 26, marginRight: 12, backgroundColor: '#2a2a2a' },
+  avatar: { width: 52, height: 52, borderRadius: 26, marginRight: 12, backgroundColor: colors.border },
   avatarPlaceholder: { alignItems: 'center', justifyContent: 'center' },
-  avatarPlaceholderText: { fontSize: 18, fontWeight: '600', color: '#9a9a9e' },
+  avatarPlaceholderText: { fontSize: 18, fontWeight: '600', color: colors.textMuted },
   rowBody: { flex: 1 },
-  name: { fontSize: 16, fontWeight: '600', color: '#f0f0f0' },
-  hint: { fontSize: 13, color: '#9a9a9e', marginTop: 2 },
-  unreadDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#3b82f6', marginLeft: 8 },
+  name: { fontSize: 16, fontWeight: '600', color: colors.textPrimary },
+  hint: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
+  unreadDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.accent, marginLeft: 8 },
 });

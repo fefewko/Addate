@@ -13,6 +13,7 @@ import {
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { SOBRIETY_LABEL, SUBSTANCE_LABEL, SobrietyStatus, calcAge, isOnline } from '../lib/profileDisplay';
+import { colors } from '../lib/theme';
 
 type FullProfile = {
   id: string;
@@ -95,7 +96,7 @@ export default function ProfileDetail() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#3b82f6" />
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
@@ -133,7 +134,7 @@ export default function ProfileDetail() {
             {age ? `, ${age}` : ''}
           </Text>
           <View style={styles.onlineBadge}>
-            <View style={[styles.onlineDot, { backgroundColor: online ? '#4ade80' : '#8a8a8e' }]} />
+            <View style={[styles.onlineDot, { backgroundColor: online ? colors.success : colors.textFaint }]} />
             <Text style={styles.onlineText}>{online ? 'В сети' : 'Не в сети'}</Text>
           </View>
         </View>
@@ -188,25 +189,25 @@ export default function ProfileDetail() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#121212' },
+  container: { flex: 1, backgroundColor: colors.bg },
   contentContainer: { paddingBottom: 40 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#121212' },
-  emptyText: { color: '#a0a0a5', fontSize: 15 },
-  mainPhoto: { height: 420, backgroundColor: '#1c1c1e' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg },
+  emptyText: { color: colors.textSecondary, fontSize: 15 },
+  mainPhoto: { height: 420, backgroundColor: colors.surface },
   photoPlaceholder: { alignItems: 'center', justifyContent: 'center' },
-  photoPlaceholderText: { color: '#8a8a8e' },
+  photoPlaceholderText: { color: colors.textFaint },
   body: { padding: 20 },
   nameRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  name: { fontSize: 22, fontWeight: '700', color: '#f0f0f0', flexShrink: 1 },
+  name: { fontSize: 22, fontWeight: '700', color: colors.textPrimary, flexShrink: 1 },
   onlineBadge: { flexDirection: 'row', alignItems: 'center' },
   onlineDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
-  onlineText: { fontSize: 12, color: '#a0a0a5' },
-  infoLine: { fontSize: 14, color: '#a0a0a5', marginBottom: 4 },
-  sobriety: { fontSize: 14, color: '#3b82f6', fontWeight: '600', marginTop: 8, marginBottom: 10 },
+  onlineText: { fontSize: 12, color: colors.textSecondary },
+  infoLine: { fontSize: 14, color: colors.textSecondary, marginBottom: 4 },
+  sobriety: { fontSize: 14, color: colors.accent, fontWeight: '600', marginTop: 8, marginBottom: 10 },
   tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
-  tag: { backgroundColor: '#1c1c1e', borderRadius: 14, paddingVertical: 6, paddingHorizontal: 12 },
-  tagText: { color: '#f0f0f0', fontSize: 13 },
-  bio: { fontSize: 15, color: '#f0f0f0', lineHeight: 22, marginBottom: 24 },
-  likeButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  tag: { backgroundColor: colors.surface, borderRadius: 14, paddingVertical: 6, paddingHorizontal: 12 },
+  tagText: { color: colors.textPrimary, fontSize: 13 },
+  bio: { fontSize: 15, color: colors.textPrimary, lineHeight: 22, marginBottom: 24 },
+  likeButtonText: { color: colors.white, fontSize: 16, fontWeight: '600' },
   messageButton: { backgroundColor: '#22c55e', borderRadius: 10, padding: 16, alignItems: 'center' },
 });

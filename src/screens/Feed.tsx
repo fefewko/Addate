@@ -16,6 +16,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '../lib/supabase';
 import { likeProfile } from '../lib/matches';
 import { SOBRIETY_LABEL, SUBSTANCE_LABEL, SobrietyStatus, calcAge, isOnline, formatDistance } from '../lib/profileDisplay';
+import { colors } from '../lib/theme';
 
 type Profile = {
   id: string;
@@ -168,7 +169,7 @@ export default function Feed() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#3b82f6" />
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
@@ -213,7 +214,7 @@ export default function Feed() {
             {age ? `, ${age}` : ''}
           </Text>
           <View
-            style={[styles.onlineDot, { backgroundColor: isOnline(current.last_seen_at) ? '#4ade80' : '#5a5a5e' }]}
+            style={[styles.onlineDot, { backgroundColor: isOnline(current.last_seen_at) ? colors.success : colors.offline }]}
           />
         </View>
         {current.substance_type && current.substance_type.length > 0 && (
@@ -239,7 +240,7 @@ export default function Feed() {
           onPress={() => handleAction(current, 'skip')}
           disabled={busy}
         >
-          <Ionicons name="close" size={28} color="#a0a0a5" />
+          <Ionicons name="close" size={28} color={colors.textSecondary} />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.heartButton}
@@ -247,9 +248,9 @@ export default function Feed() {
           disabled={busy}
         >
           {busy ? (
-            <ActivityIndicator color="#fff" size="small" />
+            <ActivityIndicator color={colors.white} size="small" />
           ) : (
-            <Ionicons name="heart" size={28} color="#fff" />
+            <Ionicons name="heart" size={28} color={colors.white} />
           )}
         </TouchableOpacity>
       </View>
@@ -258,36 +259,36 @@ export default function Feed() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: '#121212' },
-  emptyTitle: { fontSize: 18, fontWeight: '600', marginBottom: 8, color: '#f0f0f0' },
-  emptyBody: { fontSize: 14, color: '#a0a0a5', textAlign: 'center', marginBottom: 20 },
-  refreshButton: { backgroundColor: '#3b82f6', borderRadius: 8, paddingVertical: 12, paddingHorizontal: 24 },
-  refreshButtonText: { color: '#fff', fontWeight: '600' },
-  container: { flex: 1, backgroundColor: '#121212' },
-  photo: { width: '100%', height: 380, backgroundColor: '#2a2a2a' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: colors.bg },
+  emptyTitle: { fontSize: 18, fontWeight: '600', marginBottom: 8, color: colors.textPrimary },
+  emptyBody: { fontSize: 14, color: colors.textSecondary, textAlign: 'center', marginBottom: 20 },
+  refreshButton: { backgroundColor: colors.accent, borderRadius: 8, paddingVertical: 12, paddingHorizontal: 24 },
+  refreshButtonText: { color: colors.white, fontWeight: '600' },
+  container: { flex: 1, backgroundColor: colors.bg },
+  photo: { width: '100%', height: 380, backgroundColor: colors.border },
   photoPlaceholder: { alignItems: 'center', justifyContent: 'center' },
-  photoPlaceholderText: { color: '#9a9a9e' },
+  photoPlaceholderText: { color: colors.textMuted },
   infoScroll: { flex: 1 },
   infoContent: { padding: 16 },
-  name: { fontSize: 20, fontWeight: '700', marginBottom: 4, color: '#f0f0f0' },
+  name: { fontSize: 20, fontWeight: '700', marginBottom: 4, color: colors.textPrimary },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   onlineDot: { width: 9, height: 9, borderRadius: 5, marginBottom: 4 },
-  city: { fontSize: 15, color: '#a0a0a5', marginBottom: 4 },
+  city: { fontSize: 15, color: colors.textSecondary, marginBottom: 4 },
   tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
-  tag: { backgroundColor: '#1c1c1e', borderRadius: 14, paddingVertical: 5, paddingHorizontal: 12 },
-  tagText: { color: '#f0f0f0', fontSize: 13 },
-  distance: { fontSize: 13, color: '#a0a0a5', marginBottom: 4, fontStyle: 'italic' },
-  sobriety: { fontSize: 14, color: '#3b82f6', fontWeight: '600', marginBottom: 10 },
-  bio: { fontSize: 15, color: '#f0f0f0', lineHeight: 21 },
+  tag: { backgroundColor: colors.surface, borderRadius: 14, paddingVertical: 5, paddingHorizontal: 12 },
+  tagText: { color: colors.textPrimary, fontSize: 13 },
+  distance: { fontSize: 13, color: colors.textSecondary, marginBottom: 4, fontStyle: 'italic' },
+  sobriety: { fontSize: 14, color: colors.accent, fontWeight: '600', marginBottom: 10 },
+  bio: { fontSize: 15, color: colors.textPrimary, lineHeight: 21 },
   actionsRow: { flexDirection: 'row', gap: 12, padding: 16 },
   skipButton: {
     flex: 1,
-    backgroundColor: '#1c1c1e',
+    backgroundColor: colors.surface,
     borderRadius: 10,
     padding: 16,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: colors.border,
   },
-  heartButton: { flex: 1, backgroundColor: '#3b82f6', borderRadius: 10, padding: 16, alignItems: 'center' },
+  heartButton: { flex: 1, backgroundColor: colors.accent, borderRadius: 10, padding: 16, alignItems: 'center' },
 });

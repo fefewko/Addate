@@ -19,6 +19,7 @@ import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../lib/supabase';
 import { uploadAvatarPhoto } from '../lib/avatarUpload';
+import { colors } from '../lib/theme';
 
 type SobrietyStatus = 'trezv' | 'v_sryve' | 'ne_ukazano';
 
@@ -193,7 +194,7 @@ export default function ProfileSetup() {
       <Text style={styles.label}>Имя</Text>
       <TextInput
         style={styles.input}
-        placeholderTextColor="#8a8a8e"
+        placeholderTextColor={colors.textFaint}
         placeholder="Как вас называть"
         value={displayName}
         onChangeText={setDisplayName}
@@ -202,7 +203,7 @@ export default function ProfileSetup() {
       <Text style={styles.label}>Дата рождения</Text>
       <TextInput
         style={styles.input}
-        placeholderTextColor="#8a8a8e"
+        placeholderTextColor={colors.textFaint}
         placeholder="ДД.ММ.ГГГГ"
         value={birthDate}
         onChangeText={(text) => setBirthDate(formatBirthDateInput(text))}
@@ -213,7 +214,7 @@ export default function ProfileSetup() {
       <Text style={styles.label}>Город</Text>
       <TextInput
         style={styles.input}
-        placeholderTextColor="#8a8a8e"
+        placeholderTextColor={colors.textFaint}
         placeholder="Например, Москва"
         value={city}
         onChangeText={setCity}
@@ -221,7 +222,7 @@ export default function ProfileSetup() {
 
       <TextInput
         style={[styles.input, styles.textArea]}
-        placeholderTextColor="#8a8a8e"
+        placeholderTextColor={colors.textFaint}
         placeholder="О себе (необязательно)"
         value={bio}
         onChangeText={setBio}
@@ -268,7 +269,7 @@ export default function ProfileSetup() {
         disabled={loading}
       >
         {loading ? (
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color={colors.white} />
         ) : (
           <Text style={styles.buttonText}>Сохранить и продолжить</Text>
         )}
@@ -278,65 +279,65 @@ export default function ProfileSetup() {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 24, paddingBottom: 48, backgroundColor: '#121212' },
-  title: { fontSize: 22, fontWeight: '600', marginBottom: 20, textAlign: 'center', color: '#f0f0f0' },
-  label: { fontSize: 13, fontWeight: '600', color: '#a0a0a5', marginBottom: 6, marginLeft: 2 },
+  container: { padding: 24, paddingBottom: 48, backgroundColor: colors.bg },
+  title: { fontSize: 22, fontWeight: '600', marginBottom: 20, textAlign: 'center', color: colors.textPrimary },
+  label: { fontSize: 13, fontWeight: '600', color: colors.textSecondary, marginBottom: 6, marginLeft: 2 },
   photoPicker: {
     alignSelf: 'center',
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#2a2a2a',
+    backgroundColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
     overflow: 'hidden',
   },
   photo: { width: 120, height: 120 },
-  photoPlaceholder: { color: '#9a9a9e', fontSize: 13, textAlign: 'center', paddingHorizontal: 8 },
+  photoPlaceholder: { color: colors.textMuted, fontSize: 13, textAlign: 'center', paddingHorizontal: 8 },
   input: {
-    backgroundColor: '#1c1c1e',
-    color: '#f0f0f0',
+    backgroundColor: colors.surface,
+    color: colors.textPrimary,
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: colors.border,
     borderRadius: 8,
     padding: 14,
     marginBottom: 12,
     fontSize: 16,
   },
   textArea: { height: 90, textAlignVertical: 'top' },
-  sectionLabel: { fontSize: 14, fontWeight: '600', marginTop: 12, marginBottom: 8, color: '#f0f0f0' },
+  sectionLabel: { fontSize: 14, fontWeight: '600', marginTop: 12, marginBottom: 8, color: colors.textPrimary },
   radioRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   radio: {
     width: 20,
     height: 20,
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#9a9a9e',
+    borderColor: colors.textMuted,
     marginRight: 10,
   },
-  radioSelected: { borderColor: '#3b82f6', backgroundColor: '#3b82f6' },
+  radioSelected: { borderColor: colors.accent, backgroundColor: colors.accent },
   checkbox: {
     width: 20,
     height: 20,
     borderRadius: 4,
     borderWidth: 1.5,
-    borderColor: '#9a9a9e',
+    borderColor: colors.textMuted,
     marginRight: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkboxChecked: { backgroundColor: '#3b82f6', borderColor: '#3b82f6' },
-  checkboxMark: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  radioLabel: { fontSize: 15, color: '#f0f0f0' },
-  error: { color: '#f87171', marginVertical: 12, fontSize: 14 },
+  checkboxChecked: { backgroundColor: colors.accent, borderColor: colors.accent },
+  checkboxMark: { color: colors.white, fontSize: 12, fontWeight: '700' },
+  radioLabel: { fontSize: 15, color: colors.textPrimary },
+  error: { color: colors.danger, marginVertical: 12, fontSize: 14 },
   button: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: colors.accent,
     borderRadius: 8,
     padding: 16,
     alignItems: 'center',
     marginTop: 12,
   },
   buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  buttonText: { color: colors.white, fontSize: 16, fontWeight: '600' },
 });

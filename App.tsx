@@ -22,6 +22,7 @@ import Chat from './src/screens/Chat';
 import Profile from './src/screens/Profile';
 import Settings from './src/screens/Settings';
 import ProfileDetail from './src/screens/ProfileDetail';
+import { colors } from './src/lib/theme';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -123,11 +124,11 @@ function Tabs() {
             color={color}
           />
         ),
-        tabBarActiveTintColor: '#3b82f6',
-        tabBarInactiveTintColor: '#8a8a8e',
-        tabBarStyle: { backgroundColor: '#121212', borderTopColor: '#2a2a2a' },
-        headerStyle: { backgroundColor: '#121212' },
-        headerTintColor: '#f0f0f0',
+        tabBarActiveTintColor: colors.accent,
+        tabBarInactiveTintColor: colors.textFaint,
+        tabBarStyle: { backgroundColor: colors.bg, borderTopColor: colors.border },
+        headerStyle: { backgroundColor: colors.bg },
+        headerTintColor: colors.textPrimary,
       })}
     >
       <Tab.Screen name="Feed" component={Feed} options={{ title: 'Анкеты' }} />
@@ -182,8 +183,8 @@ export default function App() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#121212' }}>
-        <ActivityIndicator size="large" color="#3b82f6" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}>
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
@@ -207,13 +208,13 @@ export default function App() {
         <Stack.Screen
           name="ProfileDetail"
           component={ProfileDetail}
-          options={{ title: 'Анкета', headerStyle: { backgroundColor: '#121212' }, headerTintColor: '#f0f0f0' }}
+          options={{ title: 'Анкета', headerStyle: { backgroundColor: colors.bg }, headerTintColor: colors.textPrimary }}
         />
         <Stack.Screen name="Chat" component={Chat} options={{ title: 'Чат' }} />
         <Stack.Screen
           name="Settings"
           component={Settings}
-          options={{ title: 'Настройки', headerStyle: { backgroundColor: '#121212' }, headerTintColor: '#f0f0f0' }}
+          options={{ title: 'Настройки', headerStyle: { backgroundColor: colors.bg }, headerTintColor: colors.textPrimary }}
         />
       </Stack.Navigator>
     </NavigationContainer>

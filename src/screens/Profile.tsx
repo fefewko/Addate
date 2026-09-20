@@ -18,6 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '../lib/supabase';
 import { uploadAvatarPhoto } from '../lib/avatarUpload';
+import { colors } from '../lib/theme';
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -245,7 +246,7 @@ export default function Profile() {
     navigation.setOptions({
       headerRight: () => (
         <TouchableOpacity onPress={() => navigation.navigate('Settings')} style={{ paddingHorizontal: 12 }}>
-          <Ionicons name="settings-outline" size={22} color="#f0f0f0" />
+          <Ionicons name="settings-outline" size={22} color={colors.textPrimary} />
         </TouchableOpacity>
       ),
     });
@@ -254,7 +255,7 @@ export default function Profile() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#3b82f6" />
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
@@ -272,7 +273,7 @@ export default function Profile() {
         )}
         {uploadingPhoto && (
           <View style={styles.photoOverlay}>
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={colors.white} />
           </View>
         )}
         {photoUrl && !uploadingPhoto && (
@@ -283,7 +284,7 @@ export default function Profile() {
               setViewerVisible(true);
             }}
           >
-            <Ionicons name="eye" size={16} color="#fff" />
+            <Ionicons name="eye" size={16} color={colors.white} />
           </TouchableOpacity>
         )}
       </TouchableOpacity>
@@ -297,7 +298,7 @@ export default function Profile() {
       <Text style={styles.label}>Город</Text>
       <TextInput
         style={styles.input}
-        placeholderTextColor="#8a8a8e"
+        placeholderTextColor={colors.textFaint}
         placeholder="Например, Москва"
         value={city}
         onChangeText={setCity}
@@ -308,7 +309,7 @@ export default function Profile() {
           <Text style={styles.label}>Рост, см</Text>
           <TextInput
             style={styles.input}
-            placeholderTextColor="#8a8a8e"
+            placeholderTextColor={colors.textFaint}
             placeholder="175"
             value={heightCm}
             onChangeText={(v) => setHeightCm(v.replace(/\D/g, ''))}
@@ -320,7 +321,7 @@ export default function Profile() {
           <Text style={styles.label}>Вес, кг</Text>
           <TextInput
             style={styles.input}
-            placeholderTextColor="#8a8a8e"
+            placeholderTextColor={colors.textFaint}
             placeholder="70"
             value={weightKg}
             onChangeText={(v) => setWeightKg(v.replace(/\D/g, ''))}
@@ -333,7 +334,7 @@ export default function Profile() {
       <Text style={styles.label}>О себе</Text>
       <TextInput
         style={[styles.input, styles.textArea]}
-        placeholderTextColor="#8a8a8e"
+        placeholderTextColor={colors.textFaint}
         placeholder="Расскажите о себе"
         value={bio}
         onChangeText={setBio}
@@ -402,7 +403,7 @@ export default function Profile() {
           onPress={handleSave}
           disabled={saving}
         >
-          {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveButtonText}>Сохранить изменения</Text>}
+          {saving ? <ActivityIndicator color={colors.white} /> : <Text style={styles.saveButtonText}>Сохранить изменения</Text>}
         </TouchableOpacity>
       )}
     </ScrollView>
@@ -446,7 +447,7 @@ function PhotoViewerModal({
     <Modal visible={visible} animationType="fade" transparent={false} onRequestClose={onClose}>
       <View style={styles.viewerContainer}>
         <TouchableOpacity style={styles.viewerClose} onPress={onClose}>
-          <Ionicons name="close" size={30} color="#fff" />
+          <Ionicons name="close" size={30} color={colors.white} />
         </TouchableOpacity>
         <ScrollView
           ref={scrollRef}
@@ -475,21 +476,21 @@ function PhotoViewerModal({
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 24, paddingBottom: 60, backgroundColor: '#121212' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#121212' },
+  container: { padding: 24, paddingBottom: 60, backgroundColor: colors.bg },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg },
   photoPicker: {
     alignSelf: 'center',
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: '#1c1c1e',
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
   photo: { width: 120, height: 120 },
   photoPlaceholder: { alignItems: 'center', justifyContent: 'center' },
-  photoPlaceholderText: { color: '#8a8a8e', fontSize: 13, textAlign: 'center', paddingHorizontal: 8 },
+  photoPlaceholderText: { color: colors.textFaint, fontSize: 13, textAlign: 'center', paddingHorizontal: 8 },
   photoOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -525,28 +526,28 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 40,
     alignSelf: 'center',
-    color: '#fff',
+    color: colors.white,
     fontSize: 14,
     backgroundColor: 'rgba(0,0,0,0.5)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
   },
-  changePhotoHint: { textAlign: 'center', color: '#8a8a8e', fontSize: 12, marginTop: 8, marginBottom: 20 },
-  label: { fontSize: 13, fontWeight: '600', color: '#a0a0a5', marginBottom: 6, marginLeft: 2 },
+  changePhotoHint: { textAlign: 'center', color: colors.textFaint, fontSize: 12, marginTop: 8, marginBottom: 20 },
+  label: { fontSize: 13, fontWeight: '600', color: colors.textSecondary, marginBottom: 6, marginLeft: 2 },
   readOnlyField: {
-    backgroundColor: '#1c1c1e',
+    backgroundColor: colors.surface,
     borderRadius: 8,
     padding: 14,
     marginBottom: 12,
     opacity: 0.6,
   },
-  readOnlyText: { color: '#a0a0a5', fontSize: 16 },
+  readOnlyText: { color: colors.textSecondary, fontSize: 16 },
   input: {
-    backgroundColor: '#1c1c1e',
-    color: '#f0f0f0',
+    backgroundColor: colors.surface,
+    color: colors.textPrimary,
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: colors.border,
     borderRadius: 8,
     padding: 14,
     marginBottom: 12,
@@ -555,29 +556,29 @@ const styles = StyleSheet.create({
   textArea: { height: 90, textAlignVertical: 'top' },
   row: { flexDirection: 'row', gap: 12 },
   halfField: { flex: 1 },
-  sectionLabel: { fontSize: 14, fontWeight: '600', marginTop: 12, marginBottom: 8, color: '#f0f0f0' },
+  sectionLabel: { fontSize: 14, fontWeight: '600', marginTop: 12, marginBottom: 8, color: colors.textPrimary },
   optionRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: '#9a9a9e', marginRight: 10 },
-  radioSelected: { borderColor: '#3b82f6', backgroundColor: '#3b82f6' },
+  radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: colors.textMuted, marginRight: 10 },
+  radioSelected: { borderColor: colors.accent, backgroundColor: colors.accent },
   checkbox: {
     width: 20,
     height: 20,
     borderRadius: 4,
     borderWidth: 1.5,
-    borderColor: '#9a9a9e',
+    borderColor: colors.textMuted,
     marginRight: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkboxChecked: { backgroundColor: '#3b82f6', borderColor: '#3b82f6' },
-  checkboxMark: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  optionLabel: { fontSize: 15, color: '#f0f0f0' },
+  checkboxChecked: { backgroundColor: colors.accent, borderColor: colors.accent },
+  checkboxMark: { color: colors.white, fontSize: 12, fontWeight: '700' },
+  optionLabel: { fontSize: 15, color: colors.textPrimary },
   photosGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 },
-  thumb: { width: 72, height: 72, borderRadius: 8, backgroundColor: '#1c1c1e' },
-  thumbAdd: { alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#2a2a2a', borderStyle: 'dashed' },
-  thumbAddText: { fontSize: 28, color: '#8a8a8e' },
-  hint: { fontSize: 12, color: '#8a8a8e', marginTop: 8, marginBottom: 8 },
-  saveButton: { backgroundColor: '#3b82f6', borderRadius: 8, padding: 16, alignItems: 'center', marginTop: 20 },
+  thumb: { width: 72, height: 72, borderRadius: 8, backgroundColor: colors.surface },
+  thumbAdd: { alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed' },
+  thumbAddText: { fontSize: 28, color: colors.textFaint },
+  hint: { fontSize: 12, color: colors.textFaint, marginTop: 8, marginBottom: 8 },
+  saveButton: { backgroundColor: colors.accent, borderRadius: 8, padding: 16, alignItems: 'center', marginTop: 20 },
   buttonDisabled: { opacity: 0.6 },
-  saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  saveButtonText: { color: colors.white, fontSize: 16, fontWeight: '600' },
 });

@@ -1,0 +1,86 @@
+{
+  "name": "@react-native-community/slider",
+  "version": "5.2.0",
+  "license": "MIT",
+  "author": "react-native-community",
+  "homepage": "https://github.com/callstack/react-native-slider#readme",
+  "description": "React Native component used to select a single value from a range of values.",
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "dist/Slider.js",
+  "types": "typings/index.d.ts",
+  "keywords": [
+    "react-native",
+    "react native",
+    "slider"
+  ],
+  "scripts": {
+    "prepare": "babel --extensions \".ts,.tsx\" --out-dir dist src",
+    "lint": "npx eslint src __test__",
+    "test": "jest",
+    "prepack": "npx copyfiles \"./../README.md\" ./README.md"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.8.4",
+    "@babel/core": "^7.25.2",
+    "@babel/preset-flow": "^7.9.0",
+    "@babel/preset-typescript": "^7.28.5",
+    "@babel/runtime": "^7.25.0",
+    "@react-native-community/cli": "^20.0.2",
+    "@react-native-community/cli-platform-android": "^20.0.2",
+    "@react-native-community/cli-platform-ios": "^20.0.2",
+    "@react-native-community/eslint-config": "^3.2.0",
+    "@react-native/babel-preset": "^0.81.1",
+    "@react-native/eslint-config": "^0.81.1",
+    "@react-native/metro-config": "^0.81.1",
+    "@react-native/typescript-config": "^0.81.1",
+    "@testing-library/react-native": "^13.3.3",
+    "@types/jest": "^30.0.0",
+    "@types/react": "^19.2.0",
+    "babel-jest": "^30.2.0",
+    "babel-plugin-module-resolver": "5.0.0",
+    "copyfiles": "^2.4.1",
+    "eslint": "^8.19.0",
+    "eslint-plugin-prettier": "4.2.1",
+    "eslint-plugin-react": "^7.30.1",
+    "eslint-plugin-react-native": "^4.0.0",
+    "flow-bin": "^0.163.0",
+    "jest": "^30.2.0",
+    "prettier": "2.8.8",
+    "react": "^19.2.0",
+    "react-native": "^0.81.4",
+    "react-test-renderer": "^19.2.0",
+    "typescript": "^5.0.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/callstack/react-native-slider.git"
+  },
+  "jest": {
+    "preset": "react-native",
+    "verbose": true,
+    "modulePathIgnorePatterns": [
+      "/e2e/"
+    ]
+  },
+  "prettier": {
+    "singleQuote": true,
+    "trailingComma": "all",
+    "bracketSpacing": false,
+    "jsxBracketSameLine": true
+  },
+  "codegenConfig": {
+    "name": "RNCSlider",
+    "type": "components",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "com.reactnativecommunity.slider"
+    },
+    "ios": {
+      "componentProvider": {
+        "RNCSlider": "RNCSliderComponentView"
+      }
+    }
+  }
+}
