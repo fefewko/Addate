@@ -15,7 +15,7 @@ import * as Location from 'expo-location';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '../lib/supabase';
 import { likeProfile } from '../lib/matches';
-import { SOBRIETY_LABEL, SobrietyStatus, calcAge, isOnline, formatDistance } from '../lib/profileDisplay';
+import { SOBRIETY_LABEL, SUBSTANCE_LABEL, SobrietyStatus, calcAge, isOnline, formatDistance } from '../lib/profileDisplay';
 
 type Profile = {
   id: string;
@@ -24,6 +24,7 @@ type Profile = {
   city: string | null;
   bio: string | null;
   sobriety_status: SobrietyStatus;
+  substance_type: string[] | null;
   photo_url: string | null;
   last_seen_at: string | null;
   distanceKm?: number;
@@ -87,7 +88,7 @@ export default function Feed() {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, display_name, birth_date, city, bio, sobriety_status, photo_url, last_seen_at')
+      .select('id, display_name, birth_date, city, bio, sobriety_status, substance_type, photo_url, last_seen_at')
       .eq('moderation_status', 'approved')
       .not('id', 'in', `(${excludeIds.join(',')})`)
       .limit(20);
@@ -215,6 +216,15 @@ export default function Feed() {
             style={[styles.onlineDot, { backgroundColor: isOnline(current.last_seen_at) ? '#4ade80' : '#5a5a5e' }]}
           />
         </View>
+        {current.substance_type && current.substance_type.length > 0 && (
+          <View style={styles.tagsRow}>
+            {current.substance_type.map((s) => (
+              <View key={s} style={styles.tag}>
+                <Text style={styles.tagText}>{SUBSTANCE_LABEL[s] || s}</Text>
+              </View>
+            ))}
+          </View>
+        )}
         {current.city && <Text style={styles.city}>{current.city}</Text>}
         {formatDistance(current.distanceKm) && (
           <Text style={styles.distance}>{formatDistance(current.distanceKm)}</Text>
@@ -223,7 +233,7 @@ export default function Feed() {
         {current.bio && <Text style={styles.bio}>{current.bio}</Text>}
       </ScrollView>
 
-      <View style={styles.actions}>
+      <View style={styles.actionsRow}>
         <TouchableOpacity
           style={styles.skipButton}
           onPress={() => handleAction(current, 'skip')}
@@ -232,7 +242,7 @@ export default function Feed() {
           <Ionicons name="close" size={28} color="#a0a0a5" />
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.likeButton}
+          style={styles.heartButton}
           onPress={() => handleAction(current, 'like')}
           disabled={busy}
         >
@@ -263,10 +273,21 @@ const styles = StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   onlineDot: { width: 9, height: 9, borderRadius: 5, marginBottom: 4 },
   city: { fontSize: 15, color: '#a0a0a5', marginBottom: 4 },
+  tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
+  tag: { backgroundColor: '#1c1c1e', borderRadius: 14, paddingVertical: 5, paddingHorizontal: 12 },
+  tagText: { color: '#f0f0f0', fontSize: 13 },
   distance: { fontSize: 13, color: '#a0a0a5', marginBottom: 4, fontStyle: 'italic' },
   sobriety: { fontSize: 14, color: '#3b82f6', fontWeight: '600', marginBottom: 10 },
   bio: { fontSize: 15, color: '#f0f0f0', lineHeight: 21 },
-  actions: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#2a2a2a' },
-  skipButton: { flex: 1, padding: 16, alignItems: 'center', borderRightWidth: 1, borderRightColor: '#2a2a2a' },
-  likeButton: { flex: 1, padding: 16, alignItems: 'center', backgroundColor: '#3b82f6' },
+  actionsRow: { flexDirection: 'row', gap: 12, padding: 16 },
+  skipButton: {
+    flex: 1,
+    backgroundColor: '#1c1c1e',
+    borderRadius: 10,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+  },
+  heartButton: { flex: 1, backgroundColor: '#3b82f6', borderRadius: 10, padding: 16, alignItems: 'center' },
 });
