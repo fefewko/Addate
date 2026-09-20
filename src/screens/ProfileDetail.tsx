@@ -12,9 +12,7 @@ import {
   Alert,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '../lib/supabase';
-import { likeProfile } from '../lib/matches';
 import { SOBRIETY_LABEL, SUBSTANCE_LABEL, SobrietyStatus, calcAge, isOnline } from '../lib/profileDisplay';
 
 type FullProfile = {
@@ -42,11 +40,9 @@ export default function ProfileDetail() {
   const [profile, setProfile] = useState<FullProfile | null>(null);
   const [distanceKm, setDistanceKm] = useState<number | undefined>(undefined);
   const [loading, setLoading] = useState(true);
-  const [myId, setMyId] = useState<string | null>(null);
   const [matchInfo, setMatchInfo] = useState<{ matchId: string; status: 'pending' | 'matched' | 'rejected' } | null>(
     null
   );
-  const [liking, setLiking] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -55,7 +51,6 @@ export default function ProfileDetail() {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return;
-    setMyId(user.id);
 
     const { data, error } = await supabase
       .from('profiles')
@@ -97,47 +92,6 @@ export default function ProfileDetail() {
   useEffect(() => {
     load();
   }, [load]);
-
-  async function handleLike() {
-    if (!myId || !profile || matchInfo) return;
-    setLiking(true);
-
-    const result = await likeProfile(myId, profile.id);
-    setLiking(false);
-
-    if (result.matched) {
-      setMatchInfo({ matchId: result.matchId, status: 'matched' });
-      const age = calcAge(profile.birth_date);
-      Alert.alert('Это совпадение! 🎉', `Вы с ${profile.display_name || 'этим человеком'} понравились друг другу.`, [
-        {
-          text: 'Написать сообщение',
-          onPress: () =>
-            navigation.navigate('Chat', {
-              matchId: result.matchId,
-              otherUserId: profile.id,
-              otherName: profile.display_name,
-              otherAge: age,
-            }),
-        },
-        { text: 'Продолжить', style: 'cancel' },
-      ]);
-      return;
-    }
-
-    if (result.matchId) {
-      setMatchInfo({ matchId: result.matchId, status: 'pending' });
-    }
-  }
-
-  async function handleSkip() {
-    if (!myId || !profile || matchInfo) return;
-    setLiking(true);
-
-    await supabase.from('matches').insert({ user_a: myId, user_b: profile.id, status: 'rejected' });
-
-    setLiking(false);
-    navigation.goBack();
-  }
 
   if (loading) {
     return (
@@ -214,7 +168,7 @@ export default function ProfileDetail() {
 
         {profile.bio && <Text style={styles.bio}>{profile.bio}</Text>}
 
-        {matchInfo?.status === 'matched' ? (
+        {matchInfo?.status === 'matched' && (
           <TouchableOpacity
             style={styles.messageButton}
             onPress={() =>
@@ -228,19 +182,6 @@ export default function ProfileDetail() {
           >
             <Text style={styles.likeButtonText}>Написать сообщение</Text>
           </TouchableOpacity>
-        ) : matchInfo ? (
-          <View style={[styles.likeButton, styles.likeButtonDone]}>
-            <Text style={styles.likeButtonText}>Уже отправлено</Text>
-          </View>
-        ) : (
-          <View style={styles.actionsRow}>
-            <TouchableOpacity style={styles.skipButton} onPress={handleSkip} disabled={liking}>
-              <Ionicons name="close" size={28} color="#a0a0a5" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.heartButton} onPress={handleLike} disabled={liking}>
-              {liking ? <ActivityIndicator color="#fff" /> : <Ionicons name="heart" size={28} color="#fff" />}
-            </TouchableOpacity>
-          </View>
         )}
       </View>
     </ScrollView>
@@ -267,19 +208,6 @@ const styles = StyleSheet.create({
   tag: { backgroundColor: '#1c1c1e', borderRadius: 14, paddingVertical: 6, paddingHorizontal: 12 },
   tagText: { color: '#f0f0f0', fontSize: 13 },
   bio: { fontSize: 15, color: '#f0f0f0', lineHeight: 22, marginBottom: 24 },
-  likeButton: { backgroundColor: '#3b82f6', borderRadius: 10, padding: 16, alignItems: 'center' },
-  likeButtonDone: { backgroundColor: '#2a2a2a' },
   likeButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   messageButton: { backgroundColor: '#22c55e', borderRadius: 10, padding: 16, alignItems: 'center' },
-  actionsRow: { flexDirection: 'row', gap: 12 },
-  skipButton: {
-    flex: 1,
-    backgroundColor: '#1c1c1e',
-    borderRadius: 10,
-    padding: 16,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#2a2a2a',
-  },
-  heartButton: { flex: 1, backgroundColor: '#3b82f6', borderRadius: 10, padding: 16, alignItems: 'center' },
 });
