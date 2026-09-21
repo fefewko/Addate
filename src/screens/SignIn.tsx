@@ -132,9 +132,24 @@ export default function SignIn() {
     await routeAfterLogin(user.id);
   }
 
-  function handleForgotPassword() {
-    // Заглушка — восстановление пароля реализуем отдельным шагом
-    Alert.alert('Скоро', 'Восстановление пароля будет добавлено позже.');
+  async function handleForgotPassword() {
+    if (!email.trim()) {
+      setError('Сначала введите email в поле выше, затем нажмите "Забыли пароль?"');
+      return;
+    }
+
+    setError(null);
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim());
+
+    if (resetError) {
+      Alert.alert('Ошибка', 'Не удалось отправить письмо. Проверьте email и попробуйте ещё раз.');
+      return;
+    }
+
+    Alert.alert(
+      'Письмо отправлено',
+      'Проверьте почту — там будет ссылка для сброса пароля. Если письма нет, загляните в папку "Спам".'
+    );
   }
 
   return (

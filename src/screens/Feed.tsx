@@ -1,5 +1,5 @@
 // src/screens/Feed.tsx
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useLayoutEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -37,6 +37,20 @@ export default function Feed() {
   const [loading, setLoading] = useState(true);
   const [actingOnId, setActingOnId] = useState<string | null>(null);
   const [myId, setMyId] = useState<string | null>(null);
+  const [lastSkipped, setLastSkipped] = useState<{ matchId: string; profile: Profile } | null>(null);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity
+          onPress={() => navigation.navigate('IncomingLikes')}
+          style={{ paddingHorizontal: 12 }}
+        >
+          <Ionicons name="heart-outline" size={22} color={colors.textPrimary} />
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation]);
 
   const updateMyLocation = useCallback(async (userId: string) => {
     try {
@@ -134,15 +148,19 @@ export default function Feed() {
     setActingOnId(target.id);
 
     if (action === 'skip') {
-      await supabase.from('matches').insert({
-        user_a: myId,
-        user_b: target.id,
-        status: 'rejected',
-      });
+      const { data: inserted } = await supabase
+        .from('matches')
+        .insert({ user_a: myId, user_b: target.id, status: 'rejected' })
+        .select('id')
+        .single();
+
+      if (inserted) setLastSkipped({ matchId: inserted.id, profile: target });
       setProfiles((prev) => prev.filter((p) => p.id !== target.id));
       setActingOnId(null);
       return;
     }
+
+    setLastSkipped(null);
 
     const result = await likeProfile(myId, target.id);
     setProfiles((prev) => prev.filter((p) => p.id !== target.id));
@@ -164,6 +182,16 @@ export default function Feed() {
         { text: 'Продолжить смотреть анкеты', style: 'cancel' },
       ]);
     }
+  }
+
+  async function handleUndoSkip() {
+    if (!lastSkipped) return;
+    const { matchId, profile } = lastSkipped;
+
+    await supabase.from('matches').delete().eq('id', matchId);
+
+    setProfiles((prev) => [profile, ...prev]);
+    setLastSkipped(null);
   }
 
   if (loading) {
@@ -234,6 +262,13 @@ export default function Feed() {
         {current.bio && <Text style={styles.bio}>{current.bio}</Text>}
       </ScrollView>
 
+      {lastSkipped && (
+        <TouchableOpacity style={styles.undoRow} onPress={handleUndoSkip}>
+          <Ionicons name="arrow-undo" size={16} color={colors.accent} />
+          <Text style={styles.undoText}>Вернуть {lastSkipped.profile.display_name || 'анкету'}</Text>
+        </TouchableOpacity>
+      )}
+
       <View style={styles.actionsRow}>
         <TouchableOpacity
           style={styles.skipButton}
@@ -281,6 +316,14 @@ const styles = StyleSheet.create({
   sobriety: { fontSize: 14, color: colors.accent, fontWeight: '600', marginBottom: 10 },
   bio: { fontSize: 15, color: colors.textPrimary, lineHeight: 21 },
   actionsRow: { flexDirection: 'row', gap: 12, padding: 16 },
+  undoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+  },
+  undoText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
   skipButton: {
     flex: 1,
     backgroundColor: colors.surface,

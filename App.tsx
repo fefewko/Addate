@@ -21,6 +21,8 @@ import ChatList from './src/screens/ChatList';
 import Chat from './src/screens/Chat';
 import Profile from './src/screens/Profile';
 import Settings from './src/screens/Settings';
+import BlockedUsers from './src/screens/BlockedUsers';
+import IncomingLikes from './src/screens/IncomingLikes';
 import ProfileDetail from './src/screens/ProfileDetail';
 import { colors } from './src/lib/theme';
 
@@ -94,8 +96,19 @@ function Tabs() {
     // Тап по push-уведомлению о новом сообщении — сразу открываем список чатов
     // (полные данные о собеседнике подтянутся уже там, у нас есть только matchId)
     const notificationSub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const matchId = response.notification.request.content.data?.matchId;
-      if (matchId) {
+      const data = response.notification.request.content.data as
+        | { matchId?: string; otherUserId?: string; otherName?: string; otherAge?: number | null }
+        | undefined;
+
+      if (data?.matchId && data?.otherUserId) {
+        navigation.navigate('Chat', {
+          matchId: data.matchId,
+          otherUserId: data.otherUserId,
+          otherName: data.otherName,
+          otherAge: data.otherAge ?? undefined,
+        });
+      } else if (data?.matchId) {
+        // На случай старых уведомлений без полных данных — хотя бы список чатов
         navigation.navigate('ChatList');
       }
     });
@@ -215,6 +228,16 @@ export default function App() {
           name="Settings"
           component={Settings}
           options={{ title: 'Настройки', headerStyle: { backgroundColor: colors.bg }, headerTintColor: colors.textPrimary }}
+        />
+        <Stack.Screen
+          name="BlockedUsers"
+          component={BlockedUsers}
+          options={{ title: 'Заблокированные', headerStyle: { backgroundColor: colors.bg }, headerTintColor: colors.textPrimary }}
+        />
+        <Stack.Screen
+          name="IncomingLikes"
+          component={IncomingLikes}
+          options={{ title: 'Вы понравились', headerStyle: { backgroundColor: colors.bg }, headerTintColor: colors.textPrimary }}
         />
       </Stack.Navigator>
     </NavigationContainer>

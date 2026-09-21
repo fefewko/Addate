@@ -109,6 +109,9 @@ export default function Settings() {
       </TouchableOpacity>
 
       <Text style={styles.sectionTitle}>Аккаунт</Text>
+      <TouchableOpacity style={styles.actionRow} onPress={() => navigation.navigate('BlockedUsers')}>
+        <Text style={styles.actionText}>Заблокированные пользователи</Text>
+      </TouchableOpacity>
       <TouchableOpacity style={styles.actionRow} onPress={handleSignOut}>
         <Text style={styles.signOutText}>Выйти из аккаунта</Text>
       </TouchableOpacity>
