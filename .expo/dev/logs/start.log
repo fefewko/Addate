@@ -2623,3 +2623,13 @@
 {"_e":"metro:config","_t":1789896328080,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":true,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
 {"_e":"expo:dev-tools-plugin:load","_t":1789896331702,"plugins":[]}
 {"_e":"metro:instantiate","_t":1789896346805,"atlas":false,"workers":6,"host":"::","port":8081}
+{"_e":"root:init","_t":1789960574723,"format":"v0-jsonl","version":"57.0.25"}
+{"_e":"devserver:start","_t":1789960574748,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":true,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1789960574758,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":true,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1789960578374,"plugins":[]}
+{"_e":"metro:instantiate","_t":1789960591089,"atlas":false,"workers":6,"host":"::","port":8081}
+{"_e":"root:init","_t":1789964060358,"format":"v0-jsonl","version":"57.0.25"}
+{"_e":"devserver:start","_t":1789964060371,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":true,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1789964060377,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":true,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1789964060566,"plugins":[]}
+{"_e":"metro:instantiate","_t":1789964068526,"atlas":false,"workers":6,"host":"::","port":8081}
