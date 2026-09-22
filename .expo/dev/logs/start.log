@@ -100,3 +100,8 @@
 {"_e":"metro:client_log","_t":1789969942870,"level":"warn","data":["[expo-notifications] Listening to push token changes is not yet fully supported on web. Adding a listener will have no effect."]}
 {"_e":"metro:client_log","_t":1789969942871,"level":"log","data":["Running application \"main\" with appParams:\n","{\"hydrate\": undefined, \"rootTag\": \"#root\"}","\nDevelopment-level warnings: ON.\nPerformance optimizations: OFF."]}
 {"_e":"metro:client_log","_t":1789969967709,"level":"warn","data":["props.pointerEvents is deprecated. Use style.pointerEvents"]}
+{"_e":"root:init","_t":1789979040563,"format":"v0-jsonl","version":"57.0.25"}
+{"_e":"devserver:start","_t":1789979040598,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../..\\..\\app","serverComponents":false,"serverActions":false,"serverRendering":true,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1789979040609,"serverRoot":"../..\\..","projectRoot":"../..\\..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":true,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1789979040938,"plugins":[]}
+{"_e":"metro:instantiate","_t":1789979057875,"atlas":false,"workers":6,"host":"::","port":8081}
