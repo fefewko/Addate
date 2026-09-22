@@ -4,24 +4,24 @@
     "slug": "ADDate",
     "version": "0.0.9",
     "orientation": "portrait",
-    "icon": "./assets/Logo.png",
+    "icon": "./assets/icon.png",
     "scheme": "addate",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#121212",
     "ios": {
-      "icon": "./assets/Logo.png"
+      "icon": "./assets/icon.png"
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#121212",
-        "foregroundImage": "./assets/Logo.png"
+        "foregroundImage": "./assets/icon.png"
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.addate.ADDate"
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/Logo.png"
+      "favicon": "./assets/favicon.png"
     },
     "plugins": [
       [
