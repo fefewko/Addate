@@ -1,3 +1,44 @@
-﻿.expo/
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+expo-config.json
+
+# native prebuild
+ios/
 android/
+.kotlin/
+
+# env / secrets
+.env
+.env*.local
+
+# logs / debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.log
+
+# OS / IDE
+.DS_Store
+.idea/
+
+# builds
+*.apk
+*.aab
+*.ipa
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# misc
+*.tsbuildinfo
+.metro-health-check*
+coverage/
 cloud_public_schema.sql
