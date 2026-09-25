@@ -20,7 +20,7 @@
       "package": "com.addate.ADDate"
     },
     "web": {
-      "output": "static",
+      "output": "single",
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
