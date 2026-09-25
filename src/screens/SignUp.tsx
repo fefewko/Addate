@@ -53,10 +53,13 @@ export default function SignUp() {
 
     setLoading(true);
 
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email: email.trim(),
-      password,
-    });
+const { data, error: signUpError } = await supabase.auth.signUp({
+  email: email.trim(),
+  password,
+  options: {
+    emailRedirectTo: 'addate://auth/callback',
+  },
+});
 
     if (signUpError) {
       setError(mapAuthError(signUpError.message));
