@@ -1,17 +1,61 @@
 // src/screens/Settings.tsx
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Switch, Alert, ScrollView } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
 import { supabase } from '../lib/supabase';
 import { openSupportChat } from '../lib/support';
+import {
+  getNotificationsEnabled,
+  enableNotifications,
+  disableNotifications,
+  unregisterPushToken,
+} from '../lib/pushNotifications';
 import { colors } from '../lib/theme';
 
 export default function Settings() {
   const navigation = useNavigation<any>();
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  // Раньше здесь стоял useState(true), и тумблер не делал ровно ничего:
+  // переключение меняло только картинку. Теперь состояние отражает реальное
+  // системное разрешение, а переключение либо включает уведомления, либо
+  // снимает push-токен этого устройства.
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [notificationsBusy, setNotificationsBusy] = useState(false);
   const [updatingLocation, setUpdatingLocation] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      getNotificationsEnabled().then((enabled) => {
+        if (active) setNotificationsEnabled(enabled);
+      });
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
+
+  async function handleToggleNotifications(next: boolean) {
+    setNotificationsBusy(true);
+    try {
+      if (next) {
+        const ok = await enableNotifications();
+        if (!ok) {
+          Alert.alert(
+            'Нет доступа',
+            'Разрешите уведомления в настройках телефона, иначе включить их не получится.'
+          );
+        }
+        setNotificationsEnabled(ok);
+      } else {
+        await disableNotifications();
+        setNotificationsEnabled(false);
+      }
+    } finally {
+      setNotificationsBusy(false);
+    }
+  }
 
   async function handleUpdateLocation() {
     setUpdatingLocation(true);
@@ -40,6 +84,10 @@ export default function Settings() {
   }
 
   async function handleSignOut() {
+    // Токен снимаем ДО выхода: после signOut сессии нет, и удалить свою
+    // запись в push_tokens уже нечем. Раньше этого не было, поэтому
+    // разлогинившийся продолжал получать уведомления на своё устройство.
+    await unregisterPushToken();
     await supabase.auth.signOut();
     navigation.reset({ index: 0, routes: [{ name: 'SignIn' }] });
   }
@@ -81,10 +129,15 @@ export default function Settings() {
         <Text style={styles.rowLabel}>Push-уведомления о совпадениях и сообщениях</Text>
         <Switch
           value={notificationsEnabled}
-          onValueChange={setNotificationsEnabled}
+          onValueChange={handleToggleNotifications}
+          disabled={notificationsBusy}
           trackColor={{ false: colors.border, true: colors.accent }}
         />
       </View>
+      <Text style={styles.hint}>
+        Выключение снимает push-токен этого устройства. Разрешение операционной
+        системы при этом остаётся — его можно вернуть тумблером.
+      </Text>
 
       <Text style={styles.sectionTitle}>Геопозиция</Text>
       <TouchableOpacity style={styles.actionRow} onPress={handleUpdateLocation} disabled={updatingLocation}>

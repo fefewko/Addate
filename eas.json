@@ -6,22 +6,13 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal",
-      "env": {
-        "EXPO_ROUTER_DISABLE_RN_NAVIGATION_CHECK": "1"
-      }
+      "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal",
-      "env": {
-        "EXPO_ROUTER_DISABLE_RN_NAVIGATION_CHECK": "1"
-      }
+      "distribution": "internal"
     },
     "production": {
-      "autoIncrement": true,
-      "env": {
-        "EXPO_ROUTER_DISABLE_RN_NAVIGATION_CHECK": "1"
-      }
+      "autoIncrement": true
     }
   },
   "submit": {

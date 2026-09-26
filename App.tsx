@@ -168,6 +168,37 @@ export default function App() {
     determineInitialRoute();
   }, []);
 
+  // Реакция на потерю сессии. Раньше подписки на auth не было вовсе: если
+  // refresh-токен истёк или был отозван, приложение оставалось «внутри»,
+  // и все запросы молча падали. Теперь такого пользователь возвращается
+  // на экран входа.
+  useEffect(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      // TOKEN_REFRESHED намеренно не трогаем: он приходит каждые ~50 минут,
+      // и пересборка начального маршрута на каждом обновлении токена
+      // выбрасывала бы пользователя с текущего экрана.
+      if (event === 'SIGNED_OUT' || (event === 'SIGNED_IN' && !session)) {
+        setInitialRoute('SignIn');
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Перепроверка анкеты при возвращении в приложение. Если модератор
+  // отклонил анкету, пока пользователь им пользовался, он узнавал об этом
+  // только после переустановки.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        determineInitialRoute();
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   async function determineInitialRoute() {
     // Раньше здесь стоял голый `return` при отсутствии пользователя, из-за
     // чего loading навсегда оставался true и приложение не стартовало:
@@ -234,7 +265,12 @@ export default function App() {
 
   return (
     <NavigationContainer theme={DarkTheme}>
-      <Stack.Navigator initialRouteName={initialRoute}>
+      {/* key={initialRoute} — начальный маршрут навигатора применяется только
+          при первом монтировании, поэтому смена статуса модерации сама по себе
+          ни к чему бы не привела. Ключ заставляет стек пересобраться, когда
+          маршрут действительно изменился, и не трогает его, когда остался
+          прежним: тогда пользователя не выбрасывает с текущего экрана. */}
+      <Stack.Navigator key={initialRoute} initialRouteName={initialRoute}>
         <Stack.Screen name="SignIn" component={SignIn} options={{ headerShown: false }} />
         <Stack.Screen name="SignUp" component={SignUp} options={{ headerShown: false }} />
         <Stack.Screen

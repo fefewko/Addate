@@ -218,5 +218,5 @@ const styles = StyleSheet.create({
   tagText: { color: colors.textPrimary, fontSize: 13 },
   bio: { fontSize: 15, color: colors.textPrimary, lineHeight: 22, marginBottom: 24 },
   likeButtonText: { color: colors.white, fontSize: 16, fontWeight: '600' },
-  messageButton: { backgroundColor: '#22c55e', borderRadius: 10, padding: 16, alignItems: 'center' },
+  messageButton: { backgroundColor: colors.success, borderRadius: 10, padding: 16, alignItems: 'center' },
 });

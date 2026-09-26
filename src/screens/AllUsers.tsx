@@ -305,6 +305,16 @@ function QuickChatModal({
     };
   }, [visible, matchId, myId]);
 
+  // Подписанные ссылки живут час, поэтому по onError запрашиваем ссылку
+  // заново — только для этого одного изображения. Иначе в чате, открытом
+  // дольше часа, старые фотографии превращаются в битые картинки.
+  const refreshImage = useCallback(async (path: string) => {
+    const urls = await getSignedChatImageUrls([path]);
+    if (urls[path]) {
+      setImageUrls((prev) => ({ ...prev, [path]: urls[path] }));
+    }
+  }, []);
+
   async function handleSend() {
     if (!text.trim() || !myId || !matchId) return;
     setSending(true);
@@ -379,7 +389,11 @@ function QuickChatModal({
                   <View style={[styles.bubble, styles.imageBubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}>
                     {url ? (
                       <TouchableOpacity onPress={() => setPreviewUrl(url)}>
-                        <Image source={{ uri: url }} style={styles.chatImage} />
+                        <Image
+                          source={{ uri: url }}
+                          style={styles.chatImage}
+                          onError={() => refreshImage(item.image_path as string)}
+                        />
                       </TouchableOpacity>
                     ) : (
                       <View style={[styles.chatImage, styles.chatImageLoading]}>
