@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
+import LoadError from '../ui/LoadError';
 import { calcAge } from '../lib/profileDisplay';
 import { colors } from '../lib/theme';
 
@@ -36,14 +37,22 @@ export default function ChatList() {
   const navigation = useNavigation<any>();
   const [items, setItems] = useState<MatchItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadMatches = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
 
     const {
       data: { user },
+      error: authError,
     } = await supabase.auth.getUser();
-    if (!user) return;
+
+    if (!user) {
+      setLoading(false);
+      setLoadError(authError?.message || 'Не удалось проверить сессию.');
+      return;
+    }
 
     const { data, error } = await supabase
       .from('matches')
@@ -58,6 +67,7 @@ export default function ChatList() {
 
     if (error) {
       setLoading(false);
+      setLoadError('Не удалось загрузить диалоги: ' + error.message);
       console.warn('Ошибка загрузки совпадений:', error.message);
       return;
     }
@@ -134,6 +144,10 @@ export default function ChatList() {
         <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
+  }
+
+  if (loadError) {
+    return <LoadError message={loadError} onRetry={loadMatches} />;
   }
 
   if (items.length === 0) {

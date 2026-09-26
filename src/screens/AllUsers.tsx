@@ -24,6 +24,7 @@ import { uploadChatImage, getSignedChatImageUrls } from '../lib/chatImages';
 import { likeProfile } from '../lib/matches';
 import { supabase } from '../lib/supabase';
 import { getMyCoordinates } from '../lib/location';
+import LoadError from '../ui/LoadError';
 import { SOBRIETY_LABEL, SobrietyStatus, calcAge, isOnline, formatDistance } from '../lib/profileDisplay';
 import { colors } from '../lib/theme';
 
@@ -85,6 +86,24 @@ const DEFAULT_FILTERS: Filters = {
 const AGE_MIN = 18;
 const AGE_MAX = 90;
 const THUMB_SIZE = 24;
+
+// Значок статуса на карточке. Раньше ставилась тернарная цепочка
+// `matched ? checkmark-done : match ? checkmark : close`, из-за чего
+// status='rejected' рисовался как checkmark — то есть визуально «лайк
+// отправлен», хотя на самом деле анкета была пропущена.
+function badgeIcon(match: MatchInfo | undefined): keyof typeof Ionicons.glyphMap {
+  switch (match?.status) {
+    case 'matched':
+      return 'checkmark-done';
+    case 'pending':
+      return 'checkmark';
+    case 'rejected':
+      // Стрелка предлагает повторить лайк по нажатию.
+      return 'refresh';
+    default:
+      return 'close';
+  }
+}
 
 // Один слайдер с двумя бегунками для диапазона возраста.
 // Готовой библиотеки для range-слайдера в проекте нет — собран вручную на
@@ -310,7 +329,7 @@ function QuickChatModal({
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       quality: 0.6,
     });
 
@@ -425,6 +444,7 @@ export default function AllUsers() {
   const [myId, setMyId] = useState<string | null>(null);
   const [matchMap, setMatchMap] = useState<Map<string, MatchInfo>>(new Map());
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [filtersVisible, setFiltersVisible] = useState(false);
   const [quickChat, setQuickChat] = useState<{ matchId: string; otherName: string | null } | null>(null);
@@ -433,11 +453,18 @@ export default function AllUsers() {
 
   const loadAll = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
 
     const {
       data: { user },
+      error: authError,
     } = await supabase.auth.getUser();
-    if (!user) return;
+
+    if (!user) {
+      setLoading(false);
+      setLoadError(authError?.message || 'Не удалось проверить сессию.');
+      return;
+    }
     setMyId(user.id);
 
     const { data: blocksData } = await supabase
@@ -477,6 +504,7 @@ export default function AllUsers() {
 
     if (error) {
       setLoading(false);
+      setLoadError('Не удалось загрузить анкеты: ' + error.message);
       console.warn('Ошибка загрузки списка пользователей:', error.message);
       return;
     }
@@ -525,15 +553,32 @@ export default function AllUsers() {
     });
   }, [navigation, loadAll, filters]);
 
-  async function handleLike(target: Profile) {
-    if (!myId || matchMap.has(target.id)) return;
+  // relike=true для анкет, которые мы ранее пропустили. Раньше повторный лайк
+  // был невозможен в принципе: guard `matchMap.has(target.id)` отсекал любую
+  // пару, а бейдж при status='rejected' выглядел как «лайк отправлен»
+  // (синяя галочка) и при нажатии ничего не делал. Итог: пропущенного
+  // в ленте человека нельзя было лайкнуть из вкладки «Все» вообще.
+  async function handleLike(target: Profile, relike = false) {
+    if (!myId) return;
+
+    const existing = matchMap.get(target.id);
+    if (existing && !relike) return;
+
     setBusyId(target.id);
 
     const result = await likeProfile(myId, target.id);
     setBusyId(null);
 
+    if (result.matchId) {
+      setMatchMap((prev) =>
+        new Map(prev).set(target.id, {
+          matchId: result.matchId as string,
+          status: result.matched ? 'matched' : 'pending',
+        })
+      );
+    }
+
     if (result.matched) {
-      setMatchMap((prev) => new Map(prev).set(target.id, { matchId: result.matchId, status: 'matched' }));
       Alert.alert('Это совпадение! 🎉', `Вы с ${target.display_name || 'этим человеком'} понравились друг другу.`, [
         {
           text: 'Написать сообщение',
@@ -541,11 +586,6 @@ export default function AllUsers() {
         },
         { text: 'Продолжить', style: 'cancel' },
       ]);
-      return;
-    }
-
-    if (result.matchId) {
-      setMatchMap((prev) => new Map(prev).set(target.id, { matchId: result.matchId as string, status: 'pending' }));
     }
   }
 
@@ -607,6 +647,10 @@ export default function AllUsers() {
     );
   }
 
+  if (loadError) {
+    return <LoadError message={loadError} onRetry={loadAll} />;
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       {activeFilterCount > 0 && (
@@ -653,6 +697,8 @@ export default function AllUsers() {
                         styles.statusBadge,
                         match?.status === 'matched'
                           ? styles.statusBadgeMatched
+                          : match?.status === 'rejected'
+                          ? styles.statusBadgeNone
                           : match
                           ? styles.statusBadgeSent
                           : styles.statusBadgeNone,
@@ -660,8 +706,8 @@ export default function AllUsers() {
                       onPress={() => {
                         if (match?.status === 'matched') {
                           setQuickChat({ matchId: match.matchId, otherName: profile.display_name });
-                        } else if (!match) {
-                          handleLike(profile);
+                        } else if (!match || match.status === 'rejected') {
+                          handleLike(profile, match?.status === 'rejected');
                         }
                       }}
                       disabled={busy || match?.status === 'pending'}
@@ -669,11 +715,7 @@ export default function AllUsers() {
                       {busy ? (
                         <ActivityIndicator color={colors.white} size="small" />
                       ) : (
-                        <Ionicons
-                          name={match?.status === 'matched' ? 'checkmark-done' : match ? 'checkmark' : 'close'}
-                          size={16}
-                          color={colors.white}
-                        />
+                        <Ionicons name={badgeIcon(match)} size={16} color={colors.white} />
                       )}
                     </TouchableOpacity>
                   </View>

@@ -3,6 +3,7 @@ import React, { useCallback, useState } from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
+import LoadError from '../ui/LoadError';
 import { colors } from '../lib/theme';
 
 type BlockedItem = {
@@ -15,14 +16,22 @@ type BlockedItem = {
 export default function BlockedUsers() {
   const [items, setItems] = useState<BlockedItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
 
     const {
       data: { user },
+      error: authError,
     } = await supabase.auth.getUser();
-    if (!user) return;
+
+    if (!user) {
+      setLoading(false);
+      setLoadError(authError?.message || 'Не удалось проверить сессию.');
+      return;
+    }
 
     const { data: blocks } = await supabase
       .from('blocks')
@@ -79,6 +88,10 @@ export default function BlockedUsers() {
         <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
+  }
+
+  if (loadError) {
+    return <LoadError message={loadError} onRetry={load} />;
   }
 
   if (items.length === 0) {

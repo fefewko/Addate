@@ -4,6 +4,7 @@ import { View, Text, Image, TouchableOpacity, StyleSheet, ActivityIndicator, Ale
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '../lib/supabase';
+import LoadError from '../ui/LoadError';
 import { likeProfile } from '../lib/matches';
 import { colors } from '../lib/theme';
 import { SOBRIETY_LABEL, SobrietyStatus, calcAge } from '../lib/profileDisplay';
@@ -25,14 +26,22 @@ export default function IncomingLikes() {
   const [loading, setLoading] = useState(true);
   const [myId, setMyId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
 
     const {
       data: { user },
+      error: authError,
     } = await supabase.auth.getUser();
-    if (!user) return;
+
+    if (!user) {
+      setLoading(false);
+      setLoadError(authError?.message || 'Не удалось проверить сессию.');
+      return;
+    }
     setMyId(user.id);
 
     const { data: blocksData } = await supabase
@@ -58,6 +67,7 @@ export default function IncomingLikes() {
     setLoading(false);
 
     if (error) {
+      setLoadError('Не удалось загрузить лайки: ' + error.message);
       console.warn('Ошибка загрузки лайков:', error.message);
       return;
     }
@@ -123,6 +133,10 @@ export default function IncomingLikes() {
         <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
+  }
+
+  if (loadError) {
+    return <LoadError message={loadError} onRetry={load} />;
   }
 
   if (items.length === 0) {

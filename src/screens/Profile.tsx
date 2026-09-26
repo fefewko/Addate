@@ -18,6 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '../lib/supabase';
 import { uploadAvatarPhoto } from '../lib/avatarUpload';
+import LoadError from '../ui/LoadError';
 import { colors } from '../lib/theme';
 
 const screenWidth = Dimensions.get('window').width;
@@ -56,6 +57,7 @@ export default function Profile() {
   const [additionalPhotos, setAdditionalPhotos] = useState<string[]>([]);
 
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [viewerVisible, setViewerVisible] = useState(false);
@@ -71,11 +73,18 @@ export default function Profile() {
 
   const loadProfile = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
 
     const {
       data: { user },
+      error: authError,
     } = await supabase.auth.getUser();
-    if (!user) return;
+
+    if (!user) {
+      setLoading(false);
+      setLoadError(authError?.message || 'Не удалось проверить сессию.');
+      return;
+    }
 
     setUserId(user.id);
     setEmail(user.email || '');
@@ -90,7 +99,14 @@ export default function Profile() {
 
     setLoading(false);
 
-    if (error || !data) return;
+    if (error) {
+      setLoadError('Не удалось загрузить профиль: ' + error.message);
+      return;
+    }
+    if (!data) {
+      setLoadError('Анкета не найдена.');
+      return;
+    }
 
     setCity(data.city || '');
     setHeightCm(data.height_cm ? String(data.height_cm) : '');
@@ -141,7 +157,7 @@ export default function Profile() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       quality: 0.7,
       allowsEditing: true,
       aspect: [1, 1],
@@ -175,7 +191,7 @@ export default function Profile() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       quality: 0.7,
       allowsEditing: true,
       aspect: [3, 4],
@@ -258,6 +274,10 @@ export default function Profile() {
         <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
+  }
+
+  if (loadError) {
+    return <LoadError message={loadError} onRetry={loadProfile} />;
   }
 
   return (

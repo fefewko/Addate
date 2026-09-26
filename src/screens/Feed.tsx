@@ -32,6 +32,8 @@ type Profile = {
   distanceKm?: number;
 };
 
+const AUTO_REFRESH_MS = 60_000;
+
 export default function Feed() {
   const navigation = useNavigation<any>();
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -39,19 +41,7 @@ export default function Feed() {
   const [actingOnId, setActingOnId] = useState<string | null>(null);
   const [myId, setMyId] = useState<string | null>(null);
   const [lastSkipped, setLastSkipped] = useState<{ matchId: string; profile: Profile } | null>(null);
-
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerRight: () => (
-        <TouchableOpacity
-          onPress={() => navigation.navigate('IncomingLikes')}
-          style={{ paddingHorizontal: 12 }}
-        >
-          <Ionicons name="heart-outline" size={22} color={colors.textPrimary} />
-        </TouchableOpacity>
-      ),
-    });
-  }, [navigation]);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const updateMyLocation = useCallback(async (userId: string) => {
     try {
@@ -68,81 +58,135 @@ export default function Feed() {
     }
   }, []);
 
-  const loadFeed = useCallback(async () => {
-    setLoading(true);
+  // silent=true — фоновое обновление: список на экране не подменяем
+  // спиннером, чтобы мигание каждые пару минут не раздражало.
+  const loadFeed = useCallback(
+    async (silent = false) => {
+      if (!silent) {
+        setLoading(true);
+        setLoadError(null);
+      }
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
-    setMyId(user.id);
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
 
-    await updateMyLocation(user.id);
+      // Раньше здесь был просто `return`, из-за чего loading навсегда
+      // оставался true и экран висел на спиннере при любом сбое сессии.
+      if (!user) {
+        setLoading(false);
+        setLoadError(authError?.message || 'Не удалось проверить сессию.');
+        return;
+      }
 
-    // 1. Кого я уже блокировал или кто заблокировал меня — исключаем в обе стороны
-    const { data: blocksData } = await supabase
-      .from('blocks')
-      .select('blocker_id, blocked_id')
-      .or(`blocker_id.eq.${user.id},blocked_id.eq.${user.id}`);
+      setMyId(user.id);
 
-    const blockedIds = new Set<string>();
-    (blocksData || []).forEach((b) => {
-      blockedIds.add(b.blocker_id === user.id ? b.blocked_id : b.blocker_id);
-    });
+      await updateMyLocation(user.id);
 
-    // 2. Кому я уже поставил лайк/скип, или кто уже совпал со мной (в любом направлении)
-    const { data: actedData } = await supabase
-      .from('matches')
-      .select('user_a, user_b')
-      .or(`user_a.eq.${user.id},user_b.eq.${user.id}`);
+      // 1. Кого я уже блокировал или кто заблокировал меня — исключаем в обе стороны
+      const { data: blocksData } = await supabase
+        .from('blocks')
+        .select('blocker_id, blocked_id')
+        .or(`blocker_id.eq.${user.id},blocked_id.eq.${user.id}`);
 
-    const actedIds = new Set(
-      (actedData || []).map((m) => (m.user_a === user.id ? m.user_b : m.user_a))
-    );
+      const blockedIds = new Set<string>();
+      (blocksData || []).forEach((b) => {
+        blockedIds.add(b.blocker_id === user.id ? b.blocked_id : b.blocker_id);
+      });
 
-    const excludeIds = [user.id, ...blockedIds, ...actedIds];
+      // 2. Кому я уже поставил лайк/скип, или кто уже совпал со мной (в любом направлении)
+      const { data: actedData } = await supabase
+        .from('matches')
+        .select('user_a, user_b')
+        .or(`user_a.eq.${user.id},user_b.eq.${user.id}`);
 
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, display_name, birth_date, city, bio, sobriety_status, substance_type, photo_url, last_seen_at')
-      .eq('moderation_status', 'approved')
-      .not('id', 'in', `(${excludeIds.join(',')})`)
-      .limit(20);
+      const actedIds = new Set(
+        (actedData || []).map((m) => (m.user_a === user.id ? m.user_b : m.user_a))
+      );
 
-    if (error) {
+      const excludeIds = [user.id, ...blockedIds, ...actedIds];
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, display_name, birth_date, city, bio, sobriety_status, substance_type, photo_url, last_seen_at')
+        .eq('moderation_status', 'approved')
+        .not('id', 'in', `(${excludeIds.join(',')})`)
+        .limit(20);
+
+      if (error) {
+        setLoading(false);
+        setLoadError('Не удалось загрузить анкеты: ' + error.message);
+        console.warn('Ошибка загрузки ленты:', error.message);
+        return;
+      }
+
+      // Расстояния считаются на сервере (см. функцию nearby_profiles) —
+      // клиент никогда не получает точные координаты других пользователей,
+      // только готовое значение в километрах. Это осознанное решение по
+      // безопасности для приложения такой тематики.
+      const myLocation = await getMyCoordinates();
+
+      let distanceMap = new Map<string, number>();
+      if (myLocation) {
+        const { data: distances } = await supabase.rpc('nearby_profiles', {
+          viewer_lat: myLocation.latitude,
+          viewer_lng: myLocation.longitude,
+        });
+        (distances || []).forEach((d: { profile_id: string; distance_km: number }) => {
+          distanceMap.set(d.profile_id, d.distance_km);
+        });
+      }
+
       setLoading(false);
-      console.warn('Ошибка загрузки ленты:', error.message);
-      return;
-    }
+      setLoadError(null);
+      setProfiles((data || []).map((p) => ({ ...p, distanceKm: distanceMap.get(p.id) })));
+    },
+    [updateMyLocation]
+  );
 
-    // Расстояния считаются на сервере (см. функцию nearby_profiles) —
-    // клиент никогда не получает точные координаты других пользователей,
-    // только готовое значение в километрах. Это осознанное решение по
-    // безопасности для приложения такой тематики.
-    const myLocation = await getMyCoordinates();
-
-    let distanceMap = new Map<string, number>();
-    if (myLocation) {
-      const { data: distances } = await supabase.rpc('nearby_profiles', {
-        viewer_lat: myLocation.latitude,
-        viewer_lng: myLocation.longitude,
-      });
-      (distances || []).forEach((d: { profile_id: string; distance_km: number }) => {
-        distanceMap.set(d.profile_id, d.distance_km);
-      });
-    }
-
-    setLoading(false);
-    setProfiles((data || []).map((p) => ({ ...p, distanceKm: distanceMap.get(p.id) })));
-  }, [updateMyLocation]);
-
+  // Лента не перезагружалась никогда, кроме первого открытия: активной
+  // перезагрузки и pull-to-refresh не было, и как только список заканчивался,
+  // экран показывал «Анкет пока нет» даже когда анкеты в базе были.
   useEffect(() => {
     loadFeed();
+    const interval = setInterval(() => loadFeed(true), AUTO_REFRESH_MS);
+    return () => clearInterval(interval);
   }, [loadFeed]);
+
+  // Кнопка обновления в шапке. Эффект объявлен после loadFeed, чтобы в
+  // зависимостях не оказалась переменная, которая ещё не инициализирована.
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <View style={{ flexDirection: 'row' }}>
+          <TouchableOpacity onPress={() => loadFeed(true)} style={{ paddingHorizontal: 10 }}>
+            <Ionicons name="refresh" size={22} color={colors.textPrimary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('IncomingLikes')}
+            style={{ paddingHorizontal: 12 }}
+          >
+            <Ionicons name="heart-outline" size={22} color={colors.textPrimary} />
+          </TouchableOpacity>
+        </View>
+      ),
+    });
+  }, [navigation, loadFeed]);
 
   async function handleAction(target: Profile, action: 'like' | 'skip') {
     if (!myId) return;
     setActingOnId(target.id);
+
+    // Если текущая анкера была последней в очереди, сразу берём следующую
+    // пачку. Без этого пользователь, пролистав ленту до конца, упирался в
+    // «Анкет пока нет» и был вынужден жать «Обновить» вручную.
+    const dropFromFeed = () => {
+      setProfiles((prev) => prev.filter((p) => p.id !== target.id));
+      if (profiles.length <= 1) {
+        loadFeed(true);
+      }
+    };
 
     if (action === 'skip') {
       const { data: inserted } = await supabase
@@ -152,7 +196,7 @@ export default function Feed() {
         .single();
 
       if (inserted) setLastSkipped({ matchId: inserted.id, profile: target });
-      setProfiles((prev) => prev.filter((p) => p.id !== target.id));
+      dropFromFeed();
       setActingOnId(null);
       return;
     }
@@ -160,7 +204,7 @@ export default function Feed() {
     setLastSkipped(null);
 
     const result = await likeProfile(myId, target.id);
-    setProfiles((prev) => prev.filter((p) => p.id !== target.id));
+    dropFromFeed();
     setActingOnId(null);
 
     if (result.matched) {
@@ -220,6 +264,18 @@ export default function Feed() {
     );
   }
 
+  if (loadError) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.emptyTitle}>Не удалось загрузить</Text>
+        <Text style={styles.emptyBody}>{loadError}</Text>
+        <TouchableOpacity style={styles.refreshButton} onPress={() => loadFeed()}>
+          <Text style={styles.refreshButtonText}>Повторить</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   if (profiles.length === 0) {
     return (
       <View style={styles.center}>
@@ -227,7 +283,7 @@ export default function Feed() {
         <Text style={styles.emptyBody}>
           Загляните позже — новые анкеты появляются по мере роста сообщества.
         </Text>
-        <TouchableOpacity style={styles.refreshButton} onPress={loadFeed}>
+        <TouchableOpacity style={styles.refreshButton} onPress={() => loadFeed()}>
           <Text style={styles.refreshButtonText}>Обновить</Text>
         </TouchableOpacity>
       </View>

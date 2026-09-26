@@ -24,6 +24,7 @@ import Settings from './src/screens/Settings';
 import BlockedUsers from './src/screens/BlockedUsers';
 import IncomingLikes from './src/screens/IncomingLikes';
 import ProfileDetail from './src/screens/ProfileDetail';
+import LoadError from './src/ui/LoadError';
 import { colors } from './src/lib/theme';
 
 const Stack = createNativeStackNavigator();
@@ -160,6 +161,7 @@ type InitialRoute = 'SignIn' | 'ProfileSetup' | 'ModerationPending' | 'Tabs';
 
 export default function App() {
   const [loading, setLoading] = useState(true);
+  const [fatalError, setFatalError] = useState<string | null>(null);
   const [initialRoute, setInitialRoute] = useState<InitialRoute>('SignIn');
 
   useEffect(() => {
@@ -167,9 +169,19 @@ export default function App() {
   }, []);
 
   async function determineInitialRoute() {
+    // Раньше здесь стоял голый `return` при отсутствии пользователя, из-за
+    // чего loading навсегда оставался true и приложение не стартовало:
+    // пользователь видел только вечный спиннер, без входа и без сообщения.
     const {
       data: { session },
+      error: sessionError,
     } = await supabase.auth.getSession();
+
+    if (sessionError) {
+      setFatalError('Не удалось проверить сессию: ' + sessionError.message);
+      setLoading(false);
+      return;
+    }
 
     if (!session) {
       setInitialRoute('SignIn');
@@ -177,11 +189,17 @@ export default function App() {
       return;
     }
 
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('moderation_status, display_name')
       .eq('id', session.user.id)
       .maybeSingle();
+
+    if (profileError) {
+      setFatalError('Не удалось загрузить анкету: ' + profileError.message);
+      setLoading(false);
+      return;
+    }
 
     if (!profile || !profile.display_name) {
       setInitialRoute('ProfileSetup');
@@ -198,6 +216,18 @@ export default function App() {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}>
         <ActivityIndicator size="large" color={colors.accent} />
+      </View>
+    );
+  }
+
+  if (fatalError) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.bg }}>
+        <LoadError message={fatalError} onRetry={() => {
+          setFatalError(null);
+          setLoading(true);
+          determineInitialRoute();
+        }} />
       </View>
     );
   }

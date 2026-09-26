@@ -3,6 +3,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
+import LoadError from '../ui/LoadError';
 import { colors } from '../lib/theme';
 
 type Status = 'pending' | 'approved' | 'rejected';
@@ -27,14 +28,17 @@ export default function ModerationPending() {
   const [status, setStatus] = useState<Status>('pending');
   const [note, setNote] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
 
   const fetchStatus = useCallback(async () => {
     const {
       data: { user },
+      error: authError,
     } = await supabase.auth.getUser();
 
     if (!user) {
+      setLoading(false);
       navigation.reset({ index: 0, routes: [{ name: 'SignIn' }] });
       return;
     }
@@ -49,7 +53,16 @@ export default function ModerationPending() {
 
     setLoading(false);
 
-    if (error || !data) return;
+    // Раньше `if (error || !data) return;` молча оставлял экран в состоянии
+    // «на проверке»: сбой запроса выглядел бы как обычное ожидание модерации.
+    if (error) {
+      setLoadError('Не удалось загрузить статус модерации: ' + error.message);
+      return;
+    }
+    if (!data) {
+      setLoadError('Анкета не найдена.');
+      return;
+    }
 
     setStatus(data.moderation_status as Status);
     setNote(data.moderation_note);
@@ -108,6 +121,10 @@ export default function ModerationPending() {
         <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
+  }
+
+  if (loadError) {
+    return <LoadError message={loadError} onRetry={fetchStatus} />;
   }
 
   const content = STATUS_TEXT[status];

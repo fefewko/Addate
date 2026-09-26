@@ -382,6 +382,105 @@ BEGIN
 END;
 $$;
 
+-- B9. Серверная проверка 18+ (триггер check_profile_age)
+DO $$
+BEGIN
+  UPDATE profiles SET birth_date = (current_date - interval '10 years')::date
+    WHERE id = 'a1000000-0000-4000-8000-000000000001';
+  RAISE NOTICE '  [ПРОВАЛ] дату рождения несовершеннолетнего приняли — проверка не работает';
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE '  [ОК] несовершеннолетний отклонён (%, %)', SQLSTATE, SQLERRM;
+END;
+$$;
+
+DO $$
+BEGIN
+  UPDATE profiles SET birth_date = (current_date - interval '200 years')::date
+    WHERE id = 'a1000000-0000-4000-8000-000000000001';
+  RAISE NOTICE '  [ПРОВАЛ] заведомо неверную дату рождения приняли';
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE '  [ОК] неверная дата рождения отклонена (%, %)', SQLSTATE, SQLERRM;
+END;
+$$;
+
+DO $$
+BEGIN
+  UPDATE profiles SET birth_date = (current_date - interval '30 years')::date
+    WHERE id = 'a1000000-0000-4000-8000-000000000001';
+  RAISE NOTICE '  [ПРОВАЛ] валидную дату рождения 30 лет отклонили — проверка слишком строгая';
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE '  [ПРОВАЛ] валидную дату рождения отклонили: %', SQLERRM;
+END;
+$$;
+
+DO $$
+DECLARE v_cnt integer;
+BEGIN
+  SELECT count(*) INTO v_cnt FROM profiles
+    WHERE id = 'a1000000-0000-4000-8000-000000000001'
+      AND birth_date = (current_date - interval '30 years')::date;
+  IF v_cnt = 1 THEN
+    RAISE NOTICE '  [ОК] валидная дата рождения 30 лет принимается';
+  ELSE
+    RAISE NOTICE '  [ПРОВАЛ] валидная дата рождения 30 лет не сохранилась';
+  END IF;
+END;
+$$;
+
+-- B10. Отмена скипа («Вернуть»)
+-- Скип оставляет запись rejected — её можно отменить.
+DO $$
+DECLARE v_gone integer;
+BEGIN
+  INSERT INTO matches (id, user_a, user_b, status) VALUES
+    ('b1000000-0000-4000-8000-000000000003',
+     'a1000000-0000-4000-8000-000000000001', 'a1000000-0000-4000-8000-000000000002',
+     'rejected')
+  ON CONFLICT (id) DO NOTHING;
+
+  DELETE FROM matches
+    WHERE id = 'b1000000-0000-4000-8000-000000000003'
+      AND status = 'rejected';
+
+  SELECT count(*) INTO v_gone FROM matches
+    WHERE id = 'b1000000-0000-4000-8000-000000000003';
+
+  IF v_gone = 0 THEN
+    RAISE NOTICE '  [ОК] собственный скип отменяется, запись удаляется';
+  ELSE
+    RAISE NOTICE '  [ПРОВАЛ] скип не отменился — DELETE-политика не работает';
+  END IF;
+END;
+$$;
+
+-- Перекрытый лайком скип удалять нельзя: иначе стёрся бы лайк собеседника.
+DO $$
+DECLARE v_left integer;
+BEGIN
+  INSERT INTO matches (id, user_a, user_b, status) VALUES
+    ('b1000000-0000-4000-8000-000000000004',
+     'a1000000-0000-4000-8000-000000000001', 'a1000000-0000-4000-8000-000000000002',
+     'rejected')
+  ON CONFLICT (id) DO NOTHING;
+
+  UPDATE matches SET status = 'pending'
+    WHERE id = 'b1000000-0000-4000-8000-000000000004';
+
+  DELETE FROM matches
+    WHERE id = 'b1000000-0000-4000-8000-000000000004'
+      AND status = 'rejected';
+
+  SELECT count(*) INTO v_left FROM matches
+    WHERE id = 'b1000000-0000-4000-8000-000000000004';
+
+  IF v_left = 1 THEN
+    RAISE NOTICE '  [ОК] перекрытый лайком скип удалить нельзя — лайк защищён';
+  ELSE
+    RAISE NOTICE '  [ПРОВАЛ] скип, перекрытый лайком, удалился — чужой лайк можно уничтожить';
+  END IF;
+END;
+$$;
+
 ROLLBACK;
 
 \echo ''

@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
+import LoadError from '../ui/LoadError';
 import { getMyCoordinates } from '../lib/location';
 import { SOBRIETY_LABEL, SUBSTANCE_LABEL, SobrietyStatus, calcAge, isOnline } from '../lib/profileDisplay';
 import { colors } from '../lib/theme';
@@ -41,17 +42,25 @@ export default function ProfileDetail() {
   const [profile, setProfile] = useState<FullProfile | null>(null);
   const [distanceKm, setDistanceKm] = useState<number | undefined>(undefined);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [matchInfo, setMatchInfo] = useState<{ matchId: string; status: 'pending' | 'matched' | 'rejected' } | null>(
     null
   );
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
 
     const {
       data: { user },
+      error: authError,
     } = await supabase.auth.getUser();
-    if (!user) return;
+
+    if (!user) {
+      setLoading(false);
+      setLoadError(authError?.message || 'Не удалось проверить сессию.');
+      return;
+    }
 
     const { data, error } = await supabase
       .from('profiles')
@@ -95,6 +104,10 @@ export default function ProfileDetail() {
         <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
+  }
+
+  if (loadError) {
+    return <LoadError message={loadError} onRetry={load} />;
   }
 
   if (!profile) {
