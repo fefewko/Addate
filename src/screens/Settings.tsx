@@ -96,7 +96,13 @@ export default function Settings() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return;
+
+    // Раньше был молчаливый return: кнопка «Удалить анкету» просто ничего
+    // не делала, и пользователь думал, что сломалось приложение.
+    if (!user) {
+      Alert.alert('Нужно войти', 'Войдите в аккаунт, чтобы удалить анкету.');
+      return;
+    }
 
     Alert.alert(
       'Удалить анкету?',

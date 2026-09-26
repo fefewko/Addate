@@ -9,7 +9,13 @@ export async function openSupportChat(navigation: any) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return;
+
+  // Раньше здесь был молчаливый return: пользователь нажимал «Написать в
+  // поддержку» и не получал ничего — ни экрана, ни объяснения.
+  if (!user) {
+    Alert.alert('Нужно войти', 'Войдите в аккаунт, чтобы написать в поддержку.');
+    return;
+  }
 
   const { data: admin } = await supabase
     .from('profiles')
