@@ -14,6 +14,7 @@ import { useNavigation } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '../lib/supabase';
+import { getMyCoordinates } from '../lib/location';
 import { likeProfile } from '../lib/matches';
 import { SOBRIETY_LABEL, SUBSTANCE_LABEL, SobrietyStatus, calcAge, isOnline, formatDistance } from '../lib/profileDisplay';
 import { colors } from '../lib/theme';
@@ -118,17 +119,13 @@ export default function Feed() {
     // клиент никогда не получает точные координаты других пользователей,
     // только готовое значение в километрах. Это осознанное решение по
     // безопасности для приложения такой тематики.
-    const { data: myProfile } = await supabase
-      .from('profiles')
-      .select('latitude, longitude')
-      .eq('id', user.id)
-      .maybeSingle();
+    const myLocation = await getMyCoordinates();
 
     let distanceMap = new Map<string, number>();
-    if (myProfile?.latitude != null && myProfile?.longitude != null) {
+    if (myLocation) {
       const { data: distances } = await supabase.rpc('nearby_profiles', {
-        viewer_lat: myProfile.latitude,
-        viewer_lng: myProfile.longitude,
+        viewer_lat: myLocation.latitude,
+        viewer_lng: myLocation.longitude,
       });
       (distances || []).forEach((d: { profile_id: string; distance_km: number }) => {
         distanceMap.set(d.profile_id, d.distance_km);
@@ -188,10 +185,31 @@ export default function Feed() {
     if (!lastSkipped) return;
     const { matchId, profile } = lastSkipped;
 
-    await supabase.from('matches').delete().eq('id', matchId);
+    // Удаляем запись только если это всё ещё наш собственный скип.
+    // Условие по status — не подстраховка, а требование политики
+    // «Отмена своего скипа»: если человек успел поставить лайк в ответ,
+    // likeProfile() перевёл пару в 'pending', и удаление уничтожило бы его лайк.
+    const { data: removed, error } = await supabase
+      .from('matches')
+      .delete()
+      .eq('id', matchId)
+      .eq('status', 'rejected')
+      .select('id');
 
+    // Анкета в любом случае возвращается в ленту.
     setProfiles((prev) => [profile, ...prev]);
     setLastSkipped(null);
+
+    if (error) {
+      Alert.alert('Ошибка', 'Не удалось вернуть анкету: ' + error.message);
+      return;
+    }
+
+    if (!removed || removed.length === 0) {
+      // Пара перекрыта лайком — вернуть в ленту можно, но пользователь
+      // должен знать, что лайк уже учтён и совпадение может произойти сразу.
+      Alert.alert('Обратите внимание', 'Этот человек успел поставить вам лайк, пока вы его пропускали. Анкета возвращена в ленту — лайкните, чтобы создать совпадение.');
+    }
   }
 
   if (loading) {

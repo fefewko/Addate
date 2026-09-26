@@ -1,4 +1,4 @@
-﻿--
+--
 -- PostgreSQL database dump
 --
 
@@ -626,7 +626,7 @@ RETURNS boolean
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
-SET search_path TO '';
+SET search_path TO ''
 AS $$
   select exists (
     select 1
@@ -643,7 +643,7 @@ RETURNS boolean
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
-SET search_path TO '';
+SET search_path TO ''
 AS $$
   select exists (
     select 1
@@ -1000,22 +1000,22 @@ CREATE POLICY "Управление своими push-токенами" ON publi
 
 \unrestrict SlpYOsPjuiIO9cVtbPE2j0xQz89diAC8zFzXLRcGsh5YFfD9Ohg8x5K038uy2GU
 
-CREATE POLICY 'Загрузка своего аватара' ON storage.objects FOR INSERT TO public WITH CHECK (((bucket_id = 'avatars'::text) AND ((storage.foldername(name))[1] = (auth.uid())::text)));
-CREATE POLICY 'Загрузка фото в свой чат' ON storage.objects FOR INSERT TO public WITH CHECK (((bucket_id = 'chat-images'::text) AND (EXISTS ( SELECT 1
+CREATE POLICY "Загрузка своего аватара" ON storage.objects FOR INSERT TO public WITH CHECK (((bucket_id = 'avatars'::text) AND ((storage.foldername(name))[1] = (auth.uid())::text)));
+CREATE POLICY "Загрузка фото в свой чат" ON storage.objects FOR INSERT TO public WITH CHECK (((bucket_id = 'chat-images'::text) AND (EXISTS ( SELECT 1
    FROM matches
   WHERE (((matches.id)::text = (storage.foldername(objects.name))[1]) AND (matches.status = 'matched'::text) AND ((matches.user_a = auth.uid()) OR (matches.user_b = auth.uid())))))));
-CREATE POLICY 'Загрузка фото жалобы' ON storage.objects FOR INSERT TO authenticated WITH CHECK (((bucket_id = 'report-images'::text) AND ((storage.foldername(name))[1] = (auth.uid())::text)));
-CREATE POLICY 'Обновление своего аватара' ON storage.objects FOR UPDATE TO public USING (((bucket_id = 'avatars'::text) AND ((storage.foldername(name))[1] = (auth.uid())::text)));
-CREATE POLICY 'Пользователи могут видеть фото жа' ON storage.objects FOR SELECT TO authenticated USING ((bucket_id = 'report-images'::text));
-CREATE POLICY 'Пользователи могут загружать фото' ON storage.objects FOR INSERT TO authenticated WITH CHECK (((bucket_id = 'report-images'::text) AND ((auth.uid())::text = (owner)::text)));
-CREATE POLICY 'Просмотр фото своего чата' ON storage.objects FOR SELECT TO public USING (((bucket_id = 'chat-images'::text) AND (EXISTS ( SELECT 1
+CREATE POLICY "Загрузка фото жалобы" ON storage.objects FOR INSERT TO authenticated WITH CHECK (((bucket_id = 'report-images'::text) AND ((storage.foldername(name))[1] = (auth.uid())::text)));
+CREATE POLICY "Обновление своего аватара" ON storage.objects FOR UPDATE TO public USING (((bucket_id = 'avatars'::text) AND ((storage.foldername(name))[1] = (auth.uid())::text)));
+CREATE POLICY "Пользователи могут видеть фото жа" ON storage.objects FOR SELECT TO authenticated USING ((bucket_id = 'report-images'::text));
+CREATE POLICY "Пользователи могут загружать фото" ON storage.objects FOR INSERT TO authenticated WITH CHECK (((bucket_id = 'report-images'::text) AND ((auth.uid())::text = (owner)::text)));
+CREATE POLICY "Просмотр фото своего чата" ON storage.objects FOR SELECT TO public USING (((bucket_id = 'chat-images'::text) AND (EXISTS ( SELECT 1
    FROM matches
   WHERE (((matches.id)::text = (storage.foldername(objects.name))[1]) AND ((matches.user_a = auth.uid()) OR (matches.user_b = auth.uid())))))));
-CREATE POLICY 'Просмотр фото своей жалобы' ON storage.objects FOR SELECT TO authenticated USING (((bucket_id = 'report-images'::text) AND (((storage.foldername(name))[1] = (auth.uid())::text) OR (EXISTS ( SELECT 1
+CREATE POLICY "Просмотр фото своей жалобы" ON storage.objects FOR SELECT TO authenticated USING (((bucket_id = 'report-images'::text) AND (((storage.foldername(name))[1] = (auth.uid())::text) OR (EXISTS ( SELECT 1
    FROM (reports r
      JOIN report_attachments a ON ((a.report_id = r.id)))
   WHERE ((a.storage_path = objects.name) AND (r.reporter_id = auth.uid())))) OR ( SELECT private.is_admin() AS is_admin))));
-CREATE POLICY 'Публичное чтение аватаров' ON storage.objects FOR SELECT TO public USING ((bucket_id = 'avatars'::text));
+CREATE POLICY "Публичное чтение аватаров" ON storage.objects FOR SELECT TO public USING ((bucket_id = 'avatars'::text));
  
 -- Storage buckets 
 INSERT INTO storage.buckets (id, name, public) VALUES ('avatars', 'avatars', true) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, public = EXCLUDED.public; 
@@ -1027,22 +1027,25 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS cube; 
 CREATE EXTENSION IF NOT EXISTS earthdistance; 
  
--- Admin helper 
+-- Admin helper
+-- Внимание: private.is_admin() уже создаётся выше, в разделе политик
+-- (см. «Admin helper (must exist before policies)»). Здесь он создаётся
+-- повторно для свежей установки, где до политик дело не дошло.
 CREATE SCHEMA IF NOT EXISTS private; 
 CREATE OR REPLACE FUNCTION private.is_admin() 
 RETURNS boolean 
 LANGUAGE sql 
 STABLE 
 SECURITY DEFINER 
-SET search_path TO ''; 
-AS $ 
+SET search_path TO '' 
+AS $$ 
   select exists ( 
-    select  
+    select 1
     from public.profiles p 
     where p.id = (select auth.uid()) 
       and p.is_admin = true 
   ); 
-$;
+$$;
 
 
 -- Realtime publication

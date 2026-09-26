@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
+import { getMyCoordinates } from '../lib/location';
 import { SOBRIETY_LABEL, SUBSTANCE_LABEL, SobrietyStatus, calcAge, isOnline } from '../lib/profileDisplay';
 import { colors } from '../lib/theme';
 
@@ -71,16 +72,11 @@ export default function ProfileDetail() {
       .maybeSingle();
     setMatchInfo(existingMatch ? { matchId: existingMatch.id, status: existingMatch.status } : null);
 
-    const { data: myProfile } = await supabase
-      .from('profiles')
-      .select('latitude, longitude')
-      .eq('id', user.id)
-      .maybeSingle();
-
-    if (myProfile?.latitude != null && myProfile?.longitude != null) {
+    const myLocation = await getMyCoordinates();
+    if (myLocation) {
       const { data: distances } = await supabase.rpc('nearby_profiles', {
-        viewer_lat: myProfile.latitude,
-        viewer_lng: myProfile.longitude,
+        viewer_lat: myLocation.latitude,
+        viewer_lng: myLocation.longitude,
       });
       const match = (distances || []).find((d: { profile_id: string }) => d.profile_id === profileId);
       if (match) setDistanceKm(match.distance_km);

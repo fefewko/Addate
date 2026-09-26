@@ -23,6 +23,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { uploadChatImage, getSignedChatImageUrls } from '../lib/chatImages';
 import { likeProfile } from '../lib/matches';
 import { supabase } from '../lib/supabase';
+import { getMyCoordinates } from '../lib/location';
 import { SOBRIETY_LABEL, SobrietyStatus, calcAge, isOnline, formatDistance } from '../lib/profileDisplay';
 import { colors } from '../lib/theme';
 
@@ -480,17 +481,13 @@ export default function AllUsers() {
       return;
     }
 
-    const { data: myProfile } = await supabase
-      .from('profiles')
-      .select('latitude, longitude')
-      .eq('id', user.id)
-      .maybeSingle();
+    const myLocation = await getMyCoordinates();
 
     let distanceMap = new Map<string, number>();
-    if (myProfile?.latitude != null && myProfile?.longitude != null) {
+    if (myLocation) {
       const { data: distances } = await supabase.rpc('nearby_profiles', {
-        viewer_lat: myProfile.latitude,
-        viewer_lng: myProfile.longitude,
+        viewer_lat: myLocation.latitude,
+        viewer_lng: myLocation.longitude,
       });
       (distances || []).forEach((d: { profile_id: string; distance_km: number }) => {
         distanceMap.set(d.profile_id, d.distance_km);

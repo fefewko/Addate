@@ -3,7 +3,7 @@
 // Перед использованием установи зависимость для выбора фото:
 //   npx expo install expo-image-picker
 //
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -59,6 +59,17 @@ function ddmmyyyyToISO(value: string): string | null {
   return `${year}-${month}-${day}`;
 }
 
+// Обратное преобразование для предзаполнения формы: экран открывается не только
+// при первой регистрации, но и когда модератор отклонил уже заполненную анкету
+// и предложил её отредактировать.
+function isoToDdmmyyyy(value: string | null): string {
+  if (!value) return '';
+  const match = value.slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return '';
+  const [, year, month, day] = match;
+  return `${day}.${month}.${year}`;
+}
+
 function validateBirthDate(value: string): string | null {
   const iso = ddmmyyyyToISO(value);
   if (!iso) return 'Введите дату в формате ДД.ММ.ГГГГ';
@@ -77,15 +88,58 @@ export default function ProfileSetup() {
   const navigation = useNavigation<any>();
 
   const [displayName, setDisplayName] = useState('');
-  const [birthDate, setBirthDate] = useState(''); // YYYY-MM-DD
+  const [birthDate, setBirthDate] = useState(''); // ДД.ММ.ГГГГ
   const [city, setCity] = useState('');
   const [bio, setBio] = useState('');
   const [sobrietyStatus, setSobrietyStatus] = useState<SobrietyStatus>('ne_ukazano');
   const [substances, setSubstances] = useState<string[]>([]);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
 
+  // Фото, уже загруженное в базу. Нужно, чтобы правка отклонённой анкеты
+  // не стирала его: если пользователь не выбрал новое, photo_url должен
+  // остаться прежним, а не превратиться в null.
+  const [savedPhotoUrl, setSavedPhotoUrl] = useState<string | null>(null);
+  const [editingExisting, setEditingExisting] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Экран открывается в двух случаях: первая регистрация (анкеты ещё нет)
+  // и повторная правка после отклонения модератором (анкета уже заполнена).
+  // Без загрузки существующих данных форма показывалась пустой, а сохранение
+  // затирало имя, дату, город, фото и «о себе» значениями null.
+  useEffect(() => {
+    let active = true;
+
+    async function loadExisting() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from('profiles')
+        .select('display_name, birth_date, city, bio, sobriety_status, substance_type, photo_url')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (!active || !data) return;
+
+      setDisplayName(data.display_name || '');
+      setBirthDate(isoToDdmmyyyy(data.birth_date));
+      setCity(data.city || '');
+      setBio(data.bio || '');
+      setSobrietyStatus((data.sobriety_status as SobrietyStatus) || 'ne_ukazano');
+      setSubstances(data.substance_type || []);
+      setSavedPhotoUrl(data.photo_url || null);
+      setEditingExisting(true);
+    }
+
+    loadExisting();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   function toggleSubstance(value: string) {
     setSubstances((prev) =>
@@ -144,13 +198,18 @@ export default function ProfileSetup() {
       return;
     }
 
-    let photoUrl: string | null = null;
-    try {
-      photoUrl = await uploadPhoto(user.id);
-    } catch (e: any) {
-      setError('Не удалось загрузить фото: ' + e.message);
-      setLoading(false);
-      return;
+    // Если новое фото не выбрано, сохраняем прежнее. Раньше здесь всегда писался
+    // photoUrl из локального photoUri, который при правке отклонённой анкеты
+    // равен null, — и фото молча пропадало из анкеты.
+    let photoUrl: string | null = savedPhotoUrl;
+    if (photoUri) {
+      try {
+        photoUrl = await uploadPhoto(user.id);
+      } catch (e: any) {
+        setError('Не удалось загрузить фото: ' + e.message);
+        setLoading(false);
+        return;
+      }
     }
 
     const isoBirthDate = ddmmyyyyToISO(birthDate);
@@ -184,12 +243,16 @@ export default function ProfileSetup() {
       <Text style={styles.title}>Расскажите о себе</Text>
 
       <TouchableOpacity style={styles.photoPicker} onPress={pickPhoto}>
-        {photoUri ? (
-          <Image source={{ uri: photoUri }} style={styles.photo} />
+        {photoUri || savedPhotoUrl ? (
+          <Image source={{ uri: photoUri || savedPhotoUrl || undefined }} style={styles.photo} />
         ) : (
           <Text style={styles.photoPlaceholder}>Добавить фото</Text>
         )}
       </TouchableOpacity>
+
+      {editingExisting && savedPhotoUrl && !photoUri && (
+        <Text style={styles.photoHint}>Фото уже загружено — нажмите, чтобы заменить</Text>
+      )}
 
       <Text style={styles.label}>Имя</Text>
       <TextInput
@@ -295,6 +358,7 @@ const styles = StyleSheet.create({
   },
   photo: { width: 120, height: 120 },
   photoPlaceholder: { color: colors.textMuted, fontSize: 13, textAlign: 'center', paddingHorizontal: 8 },
+  photoHint: { color: colors.textFaint, fontSize: 12, textAlign: 'center', marginTop: -8, marginBottom: 20 },
   input: {
     backgroundColor: colors.surface,
     color: colors.textPrimary,

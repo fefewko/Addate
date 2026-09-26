@@ -7,9 +7,15 @@ import { supabase } from './supabase';
 
 // Показывать уведомление баннером, даже если приложение открыто на переднем плане —
 // иначе по умолчанию Expo молчит, пока пользователь смотрит в экран.
+//
+// shouldShowBanner — всплывающий баннер поверх экрана (Android и iOS 14+),
+// shouldShowList — запись в шторке уведомлений / Центре уведомлений.
+// Это два разных поля начиная с Expo SDK 54: старое shouldShowAlert больше
+// не влияет на поведение, его заменили именно этими двумя.
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
   }),

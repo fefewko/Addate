@@ -492,7 +492,7 @@ const styles = StyleSheet.create({
   photoPlaceholder: { alignItems: 'center', justifyContent: 'center' },
   photoPlaceholderText: { color: colors.textFaint, fontSize: 13, textAlign: 'center', paddingHorizontal: 8 },
   photoOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.5)',
     alignItems: 'center',
     justifyContent: 'center',

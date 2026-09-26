@@ -38,18 +38,39 @@ export async function openSupportChat(navigation: any) {
 
   if (existing) {
     matchId = existing.id;
+
+    // Переписка возможна только по подтверждённому совпадению, поэтому статус
+    // нужно довести до matched. Раньше ошибка этого UPDATE игнорировалась, и
+    // пользователь уходил в чат, который молча показывал пустую ленту
+    // сообщений и не давал отправить ни одного. Теперь падаем явно.
     if (existing.status !== 'matched') {
-      await supabase.from('matches').update({ status: 'matched', matched_at: new Date().toISOString() }).eq('id', existing.id);
+      const { error } = await supabase
+        .from('matches')
+        .update({ status: 'matched', matched_at: new Date().toISOString() })
+        .eq('id', existing.id);
+
+      if (error) {
+        Alert.alert('Ошибка', 'Не удалось открыть чат с поддержкой: ' + error.message);
+        return;
+      }
     }
   } else {
+    // is_support обязателен: по нему веб-оболочка модерации отбирает
+    // обращения в поддержку, в отличие от обычных совпадений.
     const { data: inserted, error } = await supabase
       .from('matches')
-      .insert({ user_a: user.id, user_b: admin.id, status: 'matched', matched_at: new Date().toISOString() })
+      .insert({
+        user_a: user.id,
+        user_b: admin.id,
+        status: 'matched',
+        matched_at: new Date().toISOString(),
+        is_support: true,
+      })
       .select('id')
       .single();
 
     if (error || !inserted) {
-      Alert.alert('Ошибка', 'Не удалось открыть чат с поддержкой.');
+      Alert.alert('Ошибка', 'Не удалось открыть чат с поддержкой: ' + (error?.message ?? 'неизвестная ошибка'));
       return;
     }
     matchId = inserted.id;
