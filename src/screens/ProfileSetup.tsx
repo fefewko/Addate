@@ -20,22 +20,11 @@ import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../lib/supabase';
 import { uploadAvatarPhoto } from '../lib/avatarUpload';
 import { colors } from '../lib/theme';
-
-type SobrietyStatus = 'trezv' | 'v_sryve' | 'ne_ukazano';
-
-const SOBRIETY_OPTIONS: { value: SobrietyStatus; label: string }[] = [
-  { value: 'trezv', label: 'В чистоте' },
-  { value: 'v_sryve', label: 'Нужна помощь' },
-  { value: 'ne_ukazano', label: 'Не скажу' },
-];
-
-const SUBSTANCE_OPTIONS = [
-  { value: 'alcohol', label: 'Алкоголь' },
-  { value: 'opioids', label: 'Опиоиды' },
-  { value: 'stimulants', label: 'Стимуляторы' },
-  { value: 'cannabis', label: 'Каннабис' },
-  { value: 'other', label: 'Другое' },
-];
+import {
+  SOBRIETY_OPTIONS,
+  SUBSTANCE_OPTIONS,
+  type SobrietyStatus,
+} from '../lib/profileDisplay';
 
 // Пользователь вводит дату как ДД.ММ.ГГГГ — привычнее для русскоязычной аудитории.
 // В базу данных при этом уходит стандартный ISO-формат ГГГГ-ММ-ДД.

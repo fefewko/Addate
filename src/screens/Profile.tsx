@@ -17,27 +17,16 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '../lib/supabase';
-import { uploadAvatarPhoto } from '../lib/avatarUpload';
+import { uploadAvatarPhoto, deleteAvatarPhoto } from '../lib/avatarUpload';
 import LoadError from '../ui/LoadError';
 import { colors } from '../lib/theme';
+import {
+  SOBRIETY_OPTIONS,
+  SUBSTANCE_OPTIONS,
+  type SobrietyStatus,
+} from '../lib/profileDisplay';
 
 const screenWidth = Dimensions.get('window').width;
-
-type SobrietyStatus = 'trezv' | 'v_sryve' | 'ne_ukazano';
-
-const SOBRIETY_OPTIONS: { value: SobrietyStatus; label: string }[] = [
-  { value: 'trezv', label: 'В чистоте' },
-  { value: 'v_sryve', label: 'Нужна помощь' },
-  { value: 'ne_ukazano', label: 'Не скажу' },
-];
-
-const SUBSTANCE_OPTIONS = [
-  { value: 'alcohol', label: 'Алкоголь' },
-  { value: 'opioids', label: 'Опиоиды' },
-  { value: 'stimulants', label: 'Стимуляторы' },
-  { value: 'cannabis', label: 'Каннабис' },
-  { value: 'other', label: 'Другое' },
-];
 
 const MAX_ADDITIONAL_PHOTOS = 4;
 
@@ -223,8 +212,19 @@ export default function Profile() {
         onPress: async () => {
           if (!userId) return;
           const updated = additionalPhotos.filter((p) => p !== url);
-          await supabase.from('profiles').update({ additional_photos: updated }).eq('id', userId);
+          const { error } = await supabase
+            .from('profiles')
+            .update({ additional_photos: updated })
+            .eq('id', userId);
+
+          if (error) {
+            Alert.alert('Ошибка', 'Не удалось убрать фото: ' + error.message);
+            return;
+          }
+
           setAdditionalPhotos(updated);
+          // Ссылка убрана из анкеты, но сам файл остался бы в бакете навсегда.
+          await deleteAvatarPhoto(url);
         },
       },
     ]);

@@ -25,7 +25,7 @@ import { likeProfile } from '../lib/matches';
 import { supabase } from '../lib/supabase';
 import { getMyCoordinates } from '../lib/location';
 import LoadError from '../ui/LoadError';
-import { SOBRIETY_LABEL, SobrietyStatus, calcAge, isOnline, formatDistance } from '../lib/profileDisplay';
+import { SOBRIETY_LABEL, SOBRIETY_OPTIONS, SUBSTANCE_OPTIONS, SobrietyStatus, calcAge, isOnline, formatDistance } from '../lib/profileDisplay';
 import { colors } from '../lib/theme';
 
 type Profile = {
@@ -41,21 +41,15 @@ type Profile = {
   distanceKm?: number;
 };
 
+// Строка от feed_profiles: та же анкета, но расстояние приходит отдельной
+// колонкой от сервера, а не собирается клиентом через nearby_profiles.
+type FeedRow = Omit<Profile, 'distanceKm'> & { distance_km: number | null };
+
 type MatchInfo = { matchId: string; status: 'pending' | 'matched' | 'rejected' };
 
 const SOBRIETY_FILTER_OPTIONS: { value: SobrietyStatus | 'any'; label: string }[] = [
   { value: 'any', label: 'Любой' },
-  { value: 'trezv', label: 'В чистоте' },
-  { value: 'v_sryve', label: 'Нужна помощь' },
-  { value: 'ne_ukazano', label: 'Не скажу' },
-];
-
-const SUBSTANCE_OPTIONS = [
-  { value: 'alcohol', label: 'Алкоголь' },
-  { value: 'opioids', label: 'Опиоиды' },
-  { value: 'stimulants', label: 'Стимуляторы' },
-  { value: 'cannabis', label: 'Каннабис' },
-  { value: 'other', label: 'Другое' },
+  ...SOBRIETY_OPTIONS,
 ];
 
 const DISTANCE_OPTIONS: { value: 'any' | '5'; label: string }[] = [
@@ -464,10 +458,19 @@ export default function AllUsers() {
   const [quickChat, setQuickChat] = useState<{ matchId: string; otherName: string | null } | null>(null);
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [draftFilters, setDraftFilters] = useState<Filters>(DEFAULT_FILTERS);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [exhausted, setExhausted] = useState(false);
+
+  // Постраничная загрузка вместо «загрузить всех». Раньше страница тянула
+  // ScrollView с .map() по всем одобренным анкетам: без виртуализации и без
+  // ограничения выборки, что начинало ощутимо тормозить на заметном числе
+  // пользователей.
+  const PAGE_SIZE = 24;
 
   const loadAll = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
+    setExhausted(false);
 
     const {
       data: { user },
@@ -480,16 +483,6 @@ export default function AllUsers() {
       return;
     }
     setMyId(user.id);
-
-    const { data: blocksData } = await supabase
-      .from('blocks')
-      .select('blocker_id, blocked_id')
-      .or(`blocker_id.eq.${user.id},blocked_id.eq.${user.id}`);
-
-    const blockedIds = new Set<string>();
-    (blocksData || []).forEach((b) => {
-      blockedIds.add(b.blocker_id === user.id ? b.blocked_id : b.blocker_id);
-    });
 
     // Смотрим совпадения в ОБЕ стороны, а не только те, что я сам инициировал —
     // иначе не увидим статус "matched", если встречный лайк пришёл первым от собеседника.
@@ -505,16 +498,18 @@ export default function AllUsers() {
     });
     setMatchMap(newMatchMap);
 
-    const excludeIds = [user.id, ...blockedIds];
+    // Исключения уходят аргументом RPC, а не в URL: список заблокированных
+    // рос без ограничений и примерно после 200 записей переставал помещаться
+    // в запрос. Плюс заблокированных отфильтровывает сама функция.
+    const myLocation = await getMyCoordinates();
 
-    const { data, error } = await supabase
-      .from('profiles')
-      .select(
-        'id, display_name, birth_date, city, bio, sobriety_status, substance_type, photo_url, last_seen_at'
-      )
-      .eq('moderation_status', 'approved')
-      .not('id', 'in', `(${excludeIds.join(',')})`)
-      .order('created_at', { ascending: false });
+    const { data, error } = await supabase.rpc('feed_profiles', {
+      excluded_ids: [user.id],
+      viewer_lat: myLocation?.latitude ?? null,
+      viewer_lng: myLocation?.longitude ?? null,
+      row_limit: PAGE_SIZE,
+      row_offset: 0,
+    });
 
     if (error) {
       setLoading(false);
@@ -523,22 +518,48 @@ export default function AllUsers() {
       return;
     }
 
-    const myLocation = await getMyCoordinates();
-
-    let distanceMap = new Map<string, number>();
-    if (myLocation) {
-      const { data: distances } = await supabase.rpc('nearby_profiles', {
-        viewer_lat: myLocation.latitude,
-        viewer_lng: myLocation.longitude,
-      });
-      (distances || []).forEach((d: { profile_id: string; distance_km: number }) => {
-        distanceMap.set(d.profile_id, d.distance_km);
-      });
-    }
+    const loaded = (data || []) as FeedRow[];
 
     setLoading(false);
-    setProfiles((data || []).map((p) => ({ ...p, distanceKm: distanceMap.get(p.id) })));
+    setLoadError(null);
+    setExhausted(loaded.length < PAGE_SIZE);
+    setProfiles(loaded.map((p) => ({ ...p, distanceKm: p.distance_km ?? undefined })));
   }, []);
+
+  // Догрузка следующей страницы при прокрутке до конца списка.
+  const loadMore = useCallback(async () => {
+    if (loadingMore || exhausted || loading || loadError || !myId) return;
+
+    setLoadingMore(true);
+    try {
+      const myLocation = await getMyCoordinates();
+      const { data, error } = await supabase.rpc('feed_profiles', {
+        excluded_ids: [myId],
+        viewer_lat: myLocation?.latitude ?? null,
+        viewer_lng: myLocation?.longitude ?? null,
+        row_limit: PAGE_SIZE,
+        row_offset: profiles.length,
+      });
+
+      if (error) {
+        console.warn('Не удалось догрузить анкеты:', error.message);
+        return;
+      }
+
+      const loaded = (data || []) as FeedRow[];
+      if (loaded.length < PAGE_SIZE) {
+        setExhausted(true);
+      }
+      if (loaded.length > 0) {
+        setProfiles((prev) => [
+          ...prev,
+          ...loaded.map((p) => ({ ...p, distanceKm: p.distance_km ?? undefined })),
+        ]);
+      }
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [exhausted, loadError, loading, loadingMore, myId, profiles.length]);
 
   useEffect(() => {
     loadAll();
@@ -685,14 +706,28 @@ export default function AllUsers() {
           </TouchableOpacity>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.list}>
-          {visibleProfiles.map((profile) => {
+        <FlatList
+          data={visibleProfiles}
+          keyExtractor={(item) => item.id}
+          numColumns={2}
+          columnWrapperStyle={styles.column}
+          contentContainerStyle={styles.list}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={styles.footer}>
+                <ActivityIndicator color={colors.accent} />
+              </View>
+            ) : null
+          }
+          renderItem={({ item: profile }) => {
             const age = calcAge(profile.birth_date);
             const match = matchMap.get(profile.id);
             const busy = busyId === profile.id;
 
             return (
-              <View key={profile.id} style={styles.card}>
+              <View style={styles.card}>
                 <TouchableOpacity
                   activeOpacity={0.85}
                   onPress={() => navigation.navigate('ProfileDetail', { profileId: profile.id })}
@@ -743,7 +778,11 @@ export default function AllUsers() {
                       <View
                         style={[
                           styles.onlineDot,
-                          { backgroundColor: isOnline(profile.last_seen_at) ? colors.success : colors.offline },
+                          {
+                            backgroundColor: isOnline(profile.last_seen_at)
+                              ? colors.success
+                              : colors.offline,
+                          },
                         ]}
                       />
                     </View>
@@ -769,8 +808,8 @@ export default function AllUsers() {
                 </TouchableOpacity>
               </View>
             );
-          })}
-        </ScrollView>
+          }}
+        />
       )}
 
       <Modal visible={filtersVisible} animationType="slide" transparent onRequestClose={() => setFiltersVisible(false)}>
@@ -871,15 +910,12 @@ const styles = StyleSheet.create({
   },
   filterBarText: { color: colors.textSecondary, fontSize: 13 },
   filterBarReset: { color: colors.accent, fontSize: 13, fontWeight: '600' },
-  list: {
-    padding: 12,
-    backgroundColor: colors.bg,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
+  list: { padding: 12, backgroundColor: colors.bg },
+  column: { gap: 12, justifyContent: 'space-between' },
+  footer: { paddingVertical: 16, alignItems: 'center' },
   card: {
-    width: '48.5%',
+    flex: 1,
+    maxWidth: '48.5%',
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 12,

@@ -2,7 +2,7 @@
 import 'react-native-url-polyfill/auto';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, ActivityIndicator, AppState } from 'react-native';
-import { NavigationContainer, DarkTheme, useNavigation } from '@react-navigation/native';
+import { NavigationContainer, DarkTheme, useNavigation, type LinkingOptions } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -24,12 +24,42 @@ import Settings from './src/screens/Settings';
 import BlockedUsers from './src/screens/BlockedUsers';
 import IncomingLikes from './src/screens/IncomingLikes';
 import ProfileDetail from './src/screens/ProfileDetail';
+import AuthCallback from './src/screens/AuthCallback';
 import LoadError from './src/ui/LoadError';
+import { resolveInitialRoute, type InitialRoute } from './src/lib/initialRoute';
 import { colors } from './src/lib/theme';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
+// Обработка входящих ссылок. Без этого параметра ссылка из письма
+// (addate://auth/callback?code=...) не доходила до приложения, и подтверждение
+// email было невозможно завершить.
+//
+// Вложенные пути вкладок получили имена 'all', 'chats' и 'me' — намеренно.
+// Схема 'profile' занята полной анкетой (profile/:profileId), и если бы
+// вкладка профиля называлась так же, пути стали бы неоднозначными.
+const linking: LinkingOptions<any> = {
+  prefixes: ['addate://'],
+  config: {
+    screens: {
+      AuthCallback: 'auth/callback',
+      Tabs: {
+        screens: {
+          Feed: '',
+          AllUsers: 'all',
+          ChatList: 'chats',
+          Profile: 'me',
+        },
+      },
+      ProfileDetail: 'profile/:profileId',
+      Chat: 'chat/:matchId',
+      Settings: 'settings',
+      BlockedUsers: 'blocked',
+      IncomingLikes: 'likes',
+    },
+  },
+};
 const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   Feed: 'flame',
   AllUsers: 'people',
@@ -157,8 +187,6 @@ function Tabs() {
   );
 }
 
-type InitialRoute = 'SignIn' | 'ProfileSetup' | 'ModerationPending' | 'Tabs';
-
 export default function App() {
   const [loading, setLoading] = useState(true);
   const [fatalError, setFatalError] = useState<string | null>(null);
@@ -203,43 +231,11 @@ export default function App() {
     // Раньше здесь стоял голый `return` при отсутствии пользователя, из-за
     // чего loading навсегда оставался true и приложение не стартовало:
     // пользователь видел только вечный спиннер, без входа и без сообщения.
-    const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
-
-    if (sessionError) {
-      setFatalError('Не удалось проверить сессию: ' + sessionError.message);
-      setLoading(false);
-      return;
+    try {
+      setInitialRoute(await resolveInitialRoute());
+    } catch (e: any) {
+      setFatalError(e.message);
     }
-
-    if (!session) {
-      setInitialRoute('SignIn');
-      setLoading(false);
-      return;
-    }
-
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('moderation_status, display_name')
-      .eq('id', session.user.id)
-      .maybeSingle();
-
-    if (profileError) {
-      setFatalError('Не удалось загрузить анкету: ' + profileError.message);
-      setLoading(false);
-      return;
-    }
-
-    if (!profile || !profile.display_name) {
-      setInitialRoute('ProfileSetup');
-    } else if (profile.moderation_status === 'approved') {
-      setInitialRoute('Tabs');
-    } else {
-      setInitialRoute('ModerationPending');
-    }
-
     setLoading(false);
   }
 
@@ -264,7 +260,7 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer theme={DarkTheme}>
+    <NavigationContainer theme={DarkTheme} linking={linking}>
       {/* key={initialRoute} — начальный маршрут навигатора применяется только
           при первом монтировании, поэтому смена статуса модерации сама по себе
           ни к чему бы не привела. Ключ заставляет стек пересобраться, когда
@@ -273,6 +269,7 @@ export default function App() {
       <Stack.Navigator key={initialRoute} initialRouteName={initialRoute}>
         <Stack.Screen name="SignIn" component={SignIn} options={{ headerShown: false }} />
         <Stack.Screen name="SignUp" component={SignUp} options={{ headerShown: false }} />
+        <Stack.Screen name="AuthCallback" component={AuthCallback} options={{ headerShown: false }} />
         <Stack.Screen
           name="ProfileSetup"
           component={ProfileSetup}

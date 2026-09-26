@@ -62,6 +62,14 @@ export default function Chat() {
   }, [navigation, otherName, otherAge]);
 
   useEffect(() => {
+    // При входе по ссылке chat/:matchId в параметрах есть только matchId,
+    // без otherUserId. Раньше здесь шёл безусловный запрос с .eq('id', undefined),
+    // который PostgREST отклонял ошибкой — надо просто пропустить проверку.
+    if (!otherUserId) {
+      setIsSupport(false);
+      return;
+    }
+
     supabase
       .from('profiles')
       .select('is_admin')

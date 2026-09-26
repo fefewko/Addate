@@ -12,6 +12,14 @@ export const SOBRIETY_LABEL: Record<SobrietyStatus, string> = {
   ne_ukazano: 'Не скажу',
 };
 
+// Варианты выбора для форм. Раньше этот список был продублирован в
+// Profile.tsx, ProfileSetup.tsx и AllUsers.tsx, поэтому любая правка
+// формулировки или добавление пункта требовали синхронных изменений
+// в трёх местах.
+export const SOBRIETY_OPTIONS: { value: SobrietyStatus; label: string }[] = (
+  Object.keys(SOBRIETY_LABEL) as SobrietyStatus[]
+).map((value) => ({ value, label: SOBRIETY_LABEL[value] }));
+
 export const SUBSTANCE_LABEL: Record<string, string> = {
   alcohol: 'Алкоголь',
   opioids: 'Опиоиды',
@@ -19,6 +27,10 @@ export const SUBSTANCE_LABEL: Record<string, string> = {
   cannabis: 'Каннабис',
   other: 'Другое',
 };
+
+export const SUBSTANCE_OPTIONS: { value: string; label: string }[] = Object.entries(SUBSTANCE_LABEL).map(
+  ([value, label]) => ({ value, label })
+);
 
 const ONLINE_THRESHOLD_MS = 3 * 60 * 1000; // 3 минуты — с запасом от heartbeat раз в 45с
 

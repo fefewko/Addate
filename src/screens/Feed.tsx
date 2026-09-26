@@ -32,6 +32,10 @@ type Profile = {
   distanceKm?: number;
 };
 
+// Строка, которую возвращает feed_profiles: та же анкета, но с расстоянием
+// от сервера вместо клиентского поля distanceKm.
+type FeedRow = Omit<Profile, 'distanceKm'> & { distance_km: number | null };
+
 const AUTO_REFRESH_MS = 60_000;
 
 export default function Feed() {
@@ -84,35 +88,28 @@ export default function Feed() {
 
       await updateMyLocation(user.id);
 
-      // 1. Кого я уже блокировал или кто заблокировал меня — исключаем в обе стороны
-      const { data: blocksData } = await supabase
-        .from('blocks')
-        .select('blocker_id, blocked_id')
-        .or(`blocker_id.eq.${user.id},blocked_id.eq.${user.id}`);
-
-      const blockedIds = new Set<string>();
-      (blocksData || []).forEach((b) => {
-        blockedIds.add(b.blocker_id === user.id ? b.blocked_id : b.blocker_id);
-      });
-
-      // 2. Кому я уже поставил лайк/скип, или кто уже совпал со мной (в любом направлении)
+      // Кого я уже поставил лайк/скип, или кто уже совпал со мной (в любом направлении)
       const { data: actedData } = await supabase
         .from('matches')
         .select('user_a, user_b')
         .or(`user_a.eq.${user.id},user_b.eq.${user.id}`);
 
-      const actedIds = new Set(
-        (actedData || []).map((m) => (m.user_a === user.id ? m.user_b : m.user_a))
-      );
+      const actedIds = (actedData || []).map((m) => (m.user_a === user.id ? m.user_b : m.user_a));
 
-      const excludeIds = [user.id, ...blockedIds, ...actedIds];
+      // Анкеты запрашиваем одним вызовом feed_profiles. Список исключений
+      // раньше уходил в URL через .not('id','in','(...)') и переставал
+      // помещаться в запрос примерно после 200 рассмотренных анкет.
+      // Аргументы RPC уходят в теле POST, поэтому такой границы нет.
+      // Заблокированные и входящие лайки отфильтровывает сама функция.
+      const myLocation = await getMyCoordinates();
 
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, display_name, birth_date, city, bio, sobriety_status, substance_type, photo_url, last_seen_at')
-        .eq('moderation_status', 'approved')
-        .not('id', 'in', `(${excludeIds.join(',')})`)
-        .limit(20);
+      const { data, error } = await supabase.rpc('feed_profiles', {
+        excluded_ids: [user.id, ...actedIds],
+        viewer_lat: myLocation?.latitude ?? null,
+        viewer_lng: myLocation?.longitude ?? null,
+        row_limit: 20,
+        row_offset: 0,
+      });
 
       if (error) {
         setLoading(false);
@@ -121,26 +118,11 @@ export default function Feed() {
         return;
       }
 
-      // Расстояния считаются на сервере (см. функцию nearby_profiles) —
-      // клиент никогда не получает точные координаты других пользователей,
-      // только готовое значение в километрах. Это осознанное решение по
-      // безопасности для приложения такой тематики.
-      const myLocation = await getMyCoordinates();
-
-      let distanceMap = new Map<string, number>();
-      if (myLocation) {
-        const { data: distances } = await supabase.rpc('nearby_profiles', {
-          viewer_lat: myLocation.latitude,
-          viewer_lng: myLocation.longitude,
-        });
-        (distances || []).forEach((d: { profile_id: string; distance_km: number }) => {
-          distanceMap.set(d.profile_id, d.distance_km);
-        });
-      }
+      const loaded = (data || []) as FeedRow[];
 
       setLoading(false);
       setLoadError(null);
-      setProfiles((data || []).map((p) => ({ ...p, distanceKm: distanceMap.get(p.id) })));
+      setProfiles(loaded.map((p) => ({ ...p, distanceKm: p.distance_km ?? undefined })));
     },
     [updateMyLocation]
   );
