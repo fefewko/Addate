@@ -16,6 +16,13 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { colors } from '../lib/theme';
+import DateOfBirthInput from '../ui/DateOfBirthInput';
+import {
+  EMPTY_PARTS,
+  partsToIso,
+  validateBirthDateParts,
+  type BirthDateParts,
+} from '../lib/date';
 
 // Переводит частые ошибки Supabase в понятный пользователю текст.
 // Дополняй по мере того, как будут встречаться новые коды ошибок.
@@ -37,7 +44,8 @@ export default function SignUp() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [agreed, setAgreed] = useState(false);
+  const [birth, setBirth] = useState<BirthDateParts>(EMPTY_PARTS);
+  const [birthError, setBirthError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,8 +56,17 @@ export default function SignUp() {
       setError('Заполните email и пароль.');
       return;
     }
-    if (!agreed) {
-      setError('Нужно подтвердить возраст 18+ и согласие с правилами.');
+
+    // Галочки «мне есть 18 лет» больше нет: вместо неё спрашивается сама
+    // дата рождения, и её нельзя поставить не глядя. Проверка 18+ дублируется
+    // на сервере триггером check_profile_age, поэтому обойти её нельзя.
+    const birthProblem = validateBirthDateParts(birth);
+    setBirthError(birthProblem);
+    if (birthProblem) return;
+
+    const birthDate = partsToIso(birth);
+    if (!birthDate) {
+      setBirthError('Не удалось разобрать дату. Проверьте день, месяц и год.');
       return;
     }
 
@@ -88,15 +105,20 @@ const { data, error: signUpError } = await supabase.auth.signUp({
       return;
     }
 
-    // Создаём пустую запись профиля. moderation_status='pending' проставится
-    // автоматически по умолчанию (см. schema.sql), поля анкеты заполнятся на ProfileSetup.
-    const { error: profileError } = await supabase.from('profiles').insert({ id: userId });
+    // Запись профиля сразу с датой рождения. moderation_status='pending'
+    // проставится автоматически по умолчанию, остальные поля анкеты
+    // заполняются на ProfileSetup.
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .insert({ id: userId, birth_date: birthDate });
 
     setLoading(false);
 
     if (profileError) {
       // Пользователь в auth уже создан, профиль — нет. Не блокируем его тут,
       // отправляем на ProfileSetup — там можно повторить insert/upsert.
+      // Триггер check_profile_age отклонит некорректную дату, но клиент уже
+      // проверил её выше, поэтому сюда попадает только ошибка прав.
       log.warn('Ошибка создания профиля:', profileError.message);
     }
 
@@ -131,18 +153,19 @@ const { data, error: signUpError } = await supabase.auth.signUp({
         onChangeText={setPassword}
       />
 
-      <TouchableOpacity
-        style={styles.checkboxRow}
-        onPress={() => setAgreed(!agreed)}
-        activeOpacity={0.7}
-      >
-        <View style={[styles.checkbox, agreed && styles.checkboxChecked]}>
-          {agreed && <Text style={styles.checkboxMark}>✓</Text>}
-        </View>
-        <Text style={styles.checkboxLabel}>
-          Мне есть 18 лет, я согласен(на) с правилами сообщества
-        </Text>
-      </TouchableOpacity>
+      <Text style={styles.label}>Дата рождения</Text>
+      <DateOfBirthInput
+        value={birth}
+        onChange={(next) => {
+          setBirth(next);
+          if (birthError) setBirthError(null);
+        }}
+        error={birthError}
+      />
+      <Text style={styles.hint}>
+        Регистрация только для людей старше 18 лет. Дата рождения видна в анкете
+        как возраст, но не показывается полностью.
+      </Text>
 
       {error && <Text style={styles.error}>{error}</Text>}
 
@@ -179,20 +202,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     fontSize: 16,
   },
-  checkboxRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 12 },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderWidth: 1.5,
-    borderColor: colors.textMuted,
-    borderRadius: 4,
-    marginRight: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
+  hint: {
+    color: colors.textFaint,
+    fontSize: 12,
+    marginTop: 8,
+    marginBottom: 4,
+    lineHeight: 16,
   },
-  checkboxChecked: { backgroundColor: colors.accent, borderColor: colors.accent },
-  checkboxMark: { color: colors.white, fontSize: 14, fontWeight: '700' },
-  checkboxLabel: { flex: 1, fontSize: 13, color: colors.textPrimary },
   error: { color: colors.danger, marginBottom: 12, fontSize: 14 },
   button: {
     backgroundColor: colors.accent,

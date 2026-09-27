@@ -26,59 +26,29 @@ import {
   SUBSTANCE_OPTIONS,
   type SobrietyStatus,
 } from '../lib/profileDisplay';
+import DateOfBirthInput from '../ui/DateOfBirthInput';
+import {
+  EMPTY_PARTS,
+  isoToParts,
+  partsToIso,
+  validateBirthDateParts,
+  type BirthDateParts,
+} from '../lib/date';
 
-// Пользователь вводит дату как ДД.ММ.ГГГГ — привычнее для русскоязычной аудитории.
-// В базу данных при этом уходит стандартный ISO-формат ГГГГ-ММ-ДД.
-
-// Автоматически вставляет точки по мере ввода: "01012000" -> "01.01.2000"
-function formatBirthDateInput(raw: string): string {
-  const digits = raw.replace(/\D/g, '').slice(0, 8);
-  const day = digits.slice(0, 2);
-  const month = digits.slice(2, 4);
-  const year = digits.slice(4, 8);
-
-  if (digits.length <= 2) return day;
-  if (digits.length <= 4) return `${day}.${month}`;
-  return `${day}.${month}.${year}`;
-}
-
-function ddmmyyyyToISO(value: string): string | null {
-  const match = value.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
-  if (!match) return null;
-  const [, day, month, year] = match;
-  return `${year}-${month}-${day}`;
-}
-
-// Обратное преобразование для предзаполнения формы: экран открывается не только
-// при первой регистрации, но и когда модератор отклонил уже заполненную анкету
-// и предложил её отредактировать.
-function isoToDdmmyyyy(value: string | null): string {
-  if (!value) return '';
-  const match = value.slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) return '';
-  const [, year, month, day] = match;
-  return `${day}.${month}.${year}`;
-}
-
-function validateBirthDate(value: string): string | null {
-  const iso = ddmmyyyyToISO(value);
-  if (!iso) return 'Введите дату в формате ДД.ММ.ГГГГ';
-
-  const date = new Date(iso);
-  if (isNaN(date.getTime())) return 'Некорректная дата';
-
-  const age = (Date.now() - date.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
-  if (age < 18) return 'Регистрация доступна только с 18 лет';
-  if (age > 100) return 'Проверьте дату рождения';
-
-  return null;
-}
+// Разбор даты, валидация и преобразование в ISO живут в src/lib/date.ts:
+// после появления ввода на экране регистрации держать вторую копию означало
+// бы гарантированный расхожд между двумя экранами.
 
 export default function ProfileSetup() {
   const navigation = useNavigation<RootNavigation>();
 
   const [displayName, setDisplayName] = useState('');
-  const [birthDate, setBirthDate] = useState(''); // ДД.ММ.ГГГГ
+  // Дата приходит с экрана регистрации уже заполненной. Здесь она
+  // показывается и остаётся доступной для правки, но отдельным обязательным
+  // вопросом не выглядит: два разных интерфейса ввода даты подряд сбивали бы
+  // с толку и предлагали бы ввести одно и то же дважды.
+  const [birth, setBirth] = useState<BirthDateParts>(EMPTY_PARTS);
+  const [birthError, setBirthError] = useState<string | null>(null);
   const [city, setCity] = useState('');
   const [bio, setBio] = useState('');
   const [sobrietyStatus, setSobrietyStatus] = useState<SobrietyStatus>('ne_ukazano');
@@ -89,6 +59,10 @@ export default function ProfileSetup() {
   // не стирала его: если пользователь не выбрал новое, photo_url должен
   // остаться прежним, а не превратиться в null.
   const [savedPhotoUrl, setSavedPhotoUrl] = useState<string | null>(null);
+  // Дата, которая уже была в базе. Нужна, чтобы отличить «пользователь не
+  // трогал поле» от «поле очистил»: в первом случае повторно требовать ввод
+  // незачем, во втором — незачем молча затирать дату.
+  const [savedBirthDate, setSavedBirthDate] = useState<string | null>(null);
   const [editingExisting, setEditingExisting] = useState(false);
 
   const [loading, setLoading] = useState(false);
@@ -116,7 +90,8 @@ export default function ProfileSetup() {
       if (!active || !data) return;
 
       setDisplayName(data.display_name || '');
-      setBirthDate(isoToDdmmyyyy(data.birth_date));
+      setBirth(isoToParts(data.birth_date));
+      setSavedBirthDate(data.birth_date || null);
       setCity(data.city || '');
       setBio(data.bio || '');
       setSobrietyStatus((data.sobriety_status as SobrietyStatus) || 'ne_ukazano');
@@ -169,11 +144,19 @@ export default function ProfileSetup() {
       return;
     }
 
-    const birthDateError = validateBirthDate(birthDate);
-    if (birthDateError) {
-      setError(birthDateError);
+    // Дата могла прийти с экрана регистрации уже заполненной. Если пользователь
+    // её не трогал, не требуем ввода; если менял — проверяем как обычно.
+    const birthProblem = validateBirthDateParts(birth);
+    const birthWasEmpty = birth.day === '' && birth.month === '' && birth.year === '';
+    if (birthProblem && !birthWasEmpty) {
+      setBirthError(birthProblem);
       return;
     }
+    if (birthWasEmpty && !savedBirthDate) {
+      setBirthError(validateBirthDateParts(birth));
+      return;
+    }
+    setBirthError(null);
 
     setLoading(true);
 
@@ -202,7 +185,10 @@ export default function ProfileSetup() {
       }
     }
 
-    const isoBirthDate = ddmmyyyyToISO(birthDate);
+    // Если поле даты не трогали, сохраняем прежнее значение. Так же, как с
+    // фото: иначе правка анкеты молча затирала бы дату, полученную при
+    // регистрации.
+    const isoBirthDate = partsToIso(birth) ?? savedBirthDate;
 
     const { error: updateError } = await supabase
       .from('profiles')
@@ -225,6 +211,7 @@ export default function ProfileSetup() {
       return;
     }
 
+    setSavedBirthDate(isoBirthDate);
     navigation.reset({ index: 0, routes: [{ name: 'ModerationPending' }] });
   }
 
@@ -254,14 +241,13 @@ export default function ProfileSetup() {
       />
 
       <Text style={styles.label}>Дата рождения</Text>
-      <TextInput
-        style={styles.input}
-        placeholderTextColor={colors.textFaint}
-        placeholder="ДД.ММ.ГГГГ"
-        value={birthDate}
-        onChangeText={(text) => setBirthDate(formatBirthDateInput(text))}
-        keyboardType="number-pad"
-        maxLength={10}
+      <DateOfBirthInput
+        value={birth}
+        onChange={(next) => {
+          setBirth(next);
+          if (birthError) setBirthError(null);
+        }}
+        error={birthError}
       />
 
       <Text style={styles.label}>Город</Text>
