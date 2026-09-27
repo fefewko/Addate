@@ -57,8 +57,6 @@ const DISTANCE_OPTIONS: { value: 'any' | '5'; label: string }[] = [
   { value: '5', label: 'Рядом (до 5 км)' },
 ];
 
-const AUTO_REFRESH_MS = 60_000;
-
 type Filters = {
   city: string;
   ageMin: number;
@@ -561,10 +559,12 @@ export default function AllUsers() {
     }
   }, [exhausted, loadError, loading, loadingMore, myId, profiles.length]);
 
+  // Автообновление по таймеру здесь было ошибкой: loadAll() заменяет список
+  // первой страницей, поэтому раз в минуту накопленные страницы исчезали и
+  // пользователя отбрасывало в начало списка. Данные обновляются кнопкой в
+  // шапке (она зовёт тот же loadAll) и при первом открытии экрана.
   useEffect(() => {
     loadAll();
-    const interval = setInterval(loadAll, AUTO_REFRESH_MS);
-    return () => clearInterval(interval);
   }, [loadAll]);
 
   useLayoutEffect(() => {
