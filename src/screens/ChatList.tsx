@@ -1,5 +1,7 @@
 // src/screens/ChatList.tsx
 import React, { useCallback, useEffect, useState } from 'react';
+import type { RootNavigation } from '../lib/navigation';
+import { log } from '../lib/log';
 import {
   View,
   Text,
@@ -51,7 +53,7 @@ function timeAgo(iso: string): string {
 }
 
 export default function ChatList() {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<RootNavigation>();
   const [items, setItems] = useState<MatchItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -92,7 +94,7 @@ export default function ChatList() {
     if (error) {
       setLoading(false);
       setLoadError('Не удалось загрузить диалоги: ' + error.message);
-      console.warn('Ошибка загрузки совпадений:', error.message);
+      log.warn('Ошибка загрузки совпадений:', error.message);
       return;
     }
 
@@ -113,15 +115,25 @@ export default function ChatList() {
       return !blockedIds.has(otherId);
     });
 
-    // Непрочитанные сообщения по каждому совпадению — одним запросом,
-    // затем раскладываем по match_id на клиенте.
-    const { data: unreadRows } = await supabase
-      .from('messages')
-      .select('match_id')
-      .is('read_at', null)
-      .neq('sender_id', user.id);
+    // Непрочитанные сообщения одним запросом, затем раскладываем по match_id.
+    //
+    // Запрос ограничен текущим списком диалогов. Раньше он шёл по всей
+    // таблице messages и возвращал строку на каждое непрочитанное сообщение
+    // вообще — чтобы построить из них Set. При тысяче непрочитанных это
+    // тысяча строк, переданных по сети ради нескольких десятков идентификаторов.
+    const matchIds = rows.map((m) => m.id);
+    let unreadMatchIds = new Set<string>();
 
-    const unreadMatchIds = new Set((unreadRows || []).map((m) => m.match_id));
+    if (matchIds.length > 0) {
+      const { data: unreadRows } = await supabase
+        .from('messages')
+        .select('match_id')
+        .in('match_id', matchIds)
+        .is('read_at', null)
+        .neq('sender_id', user.id);
+
+      unreadMatchIds = new Set((unreadRows || []).map((m) => m.match_id));
+    }
 
     const mapped: MatchItem[] = rows.map((m) => {
       const iAmUserA = m.user_a === user.id;
@@ -149,17 +161,29 @@ export default function ChatList() {
     }, [loadMatches])
   );
 
-  // Пока экран открыт, обновляем список сразу при новом сообщении или
-  // отметке "прочитано" — иначе не увидим новое сообщение, не выходя с экрана.
+  // Пока экран открыт, обновляем список при новом сообщении или отметке
+  // "прочитано" — иначе не увидим новое сообщение, не выходя с экрана.
+  //
+  // Перезагрузка отложена: событие приходит на каждое сообщение, а loadMatches
+  // тянет весь список целиком (совпадения с профилями, блокировки, непрочитанные).
+  // При серии сообщений это десятки одинаковых перезагрузок подряд — сначала
+  // подождём, пока поток уляжется, и перезагрузим один раз.
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
     const channel = supabase
       .channel('chatlist-messages-watcher')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
-        loadMatches();
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => {
+          timer = null;
+          loadMatches();
+        }, 800);
       })
       .subscribe();
 
     return () => {
+      if (timer) clearTimeout(timer);
       supabase.removeChannel(channel);
     };
   }, [loadMatches]);

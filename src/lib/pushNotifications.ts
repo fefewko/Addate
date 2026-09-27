@@ -1,5 +1,6 @@
 // src/lib/pushNotifications.ts
 import * as Notifications from 'expo-notifications';
+import { log } from './log';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
@@ -48,7 +49,7 @@ export async function registerForPushNotifications(): Promise<void> {
 
     const projectId = Constants.expoConfig?.extra?.eas?.projectId;
     if (!projectId) {
-      console.warn('Не найден projectId в app.json — push-токен не получить.');
+      log.warn('Не найден projectId в app.json — push-токен не получить.');
       return;
     }
 
@@ -66,7 +67,7 @@ export async function registerForPushNotifications(): Promise<void> {
         onConflict: 'user_id,expo_push_token',
       });
   } catch (e) {
-    console.warn('Не удалось зарегистрировать push-токен:', e);
+    log.warn('Не удалось зарегистрировать push-токен:', e);
   }
 }
 
@@ -108,10 +109,10 @@ export async function unregisterPushToken(): Promise<void> {
       .eq('expo_push_token', token);
 
     if (error) {
-      console.warn('Не удалось снять push-токен:', error.message);
+      log.warn('Не удалось снять push-токен:', error.message);
     }
   } catch (e) {
-    console.warn('Не удалось снять push-токен:', e);
+    log.warn('Не удалось снять push-токен:', e);
   }
 }
 

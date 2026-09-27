@@ -1,5 +1,6 @@
 // src/screens/ProfileDetail.tsx
 import React, { useCallback, useEffect, useState } from 'react';
+import type { RootNavigation } from '../lib/navigation';
 import {
   View,
   Text,
@@ -35,7 +36,7 @@ type FullProfile = {
 const screenWidth = Dimensions.get('window').width;
 
 export default function ProfileDetail() {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<RootNavigation>();
   const route = useRoute<any>();
   const { profileId } = route.params;
 

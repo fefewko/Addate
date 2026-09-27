@@ -1,5 +1,6 @@
 // src/screens/AuthCallback.tsx
 import React, { useCallback, useEffect, useState } from 'react';
+import type { RootNavigation } from '../lib/navigation';
 import { View, Text, ActivityIndicator, StyleSheet, TouchableOpacity } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
@@ -13,7 +14,7 @@ import { colors } from '../lib/theme';
 // приходило, пользователь по нему переходил, ничего не происходило, и
 // единственный способ войти оставался ручной ввод пароля.
 export default function AuthCallback() {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<RootNavigation>();
   const route = useRoute<any>();
   const code = route.params?.code as string | undefined;
 

@@ -1,5 +1,6 @@
 // src/screens/SignIn.tsx
 import React, { useState } from 'react';
+import type { RootNavigation } from '../lib/navigation';
 import {
   View,
   Text,
@@ -31,7 +32,7 @@ function mapAuthError(message: string): string {
 }
 
 export default function SignIn() {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<RootNavigation>();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

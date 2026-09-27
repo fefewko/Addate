@@ -116,11 +116,19 @@ function Tabs() {
       }
     });
 
-    // Realtime: обновляем счётчик сразу при новом сообщении или отметке "прочитано"
+    // Realtime: обновляем счётчик сразу при новом сообщении или отметке "прочитано".
+    // Перезагрузка отложена: событие приходит на каждое сообщение, а счётчик
+    // требует запроса с count. При серии сообщений без паузы получим серию
+    // одинаковых запросов — бейдж не изменится между ними.
+    let unreadTimer: ReturnType<typeof setTimeout> | null = null;
     const channel = supabase
       .channel('unread-messages-watcher')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
-        refreshUnreadCount();
+        if (unreadTimer) clearTimeout(unreadTimer);
+        unreadTimer = setTimeout(() => {
+          unreadTimer = null;
+          refreshUnreadCount();
+        }, 800);
       })
       .subscribe();
 
@@ -146,6 +154,7 @@ function Tabs() {
 
     return () => {
       if (heartbeatTimer.current) clearInterval(heartbeatTimer.current);
+      if (unreadTimer) clearTimeout(unreadTimer);
       appStateSub.remove();
       supabase.removeChannel(channel);
       notificationSub.remove();

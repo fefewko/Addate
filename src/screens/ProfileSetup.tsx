@@ -4,6 +4,7 @@
 //   npx expo install expo-image-picker
 //
 import React, { useCallback, useEffect, useState } from 'react';
+import type { RootNavigation } from '../lib/navigation';
 import {
   View,
   Text,
@@ -74,7 +75,7 @@ function validateBirthDate(value: string): string | null {
 }
 
 export default function ProfileSetup() {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<RootNavigation>();
 
   const [displayName, setDisplayName] = useState('');
   const [birthDate, setBirthDate] = useState(''); // ДД.ММ.ГГГГ

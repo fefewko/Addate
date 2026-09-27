@@ -1,5 +1,7 @@
 // src/screens/AllUsers.tsx
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { RootNavigation } from '../lib/navigation';
+import { log } from '../lib/log';
 import {
   View,
   Text,
@@ -444,7 +446,7 @@ function QuickChatModal({
 }
 
 export default function AllUsers() {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<RootNavigation>();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [myId, setMyId] = useState<string | null>(null);
@@ -512,7 +514,7 @@ export default function AllUsers() {
     if (error) {
       setLoading(false);
       setLoadError('Не удалось загрузить анкеты: ' + error.message);
-      console.warn('Ошибка загрузки списка пользователей:', error.message);
+      log.warn('Ошибка загрузки списка пользователей:', error.message);
       return;
     }
 
@@ -540,7 +542,7 @@ export default function AllUsers() {
       });
 
       if (error) {
-        console.warn('Не удалось догрузить анкеты:', error.message);
+        log.warn('Не удалось догрузить анкеты:', error.message);
         return;
       }
 

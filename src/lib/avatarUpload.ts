@@ -1,5 +1,6 @@
 // src/lib/avatarUpload.ts
 import { supabase } from './supabase';
+import { log } from './log';
 
 // Загружает фото в публичный бакет avatars по пути {userId}/{fileName}.{ext}
 // и возвращает публичный URL с меткой времени (чтобы не показывалась закэшированная
@@ -50,6 +51,6 @@ export async function deleteAvatarPhoto(publicUrl: string): Promise<void> {
   if (error) {
     // Не роняем интерфейс: ссылка из профиля уже убрана, осталось только
     // недоудалённый файл в бакете.
-    console.warn('Не удалось удалить файл из хранилища:', error.message);
+    log.warn('Не удалось удалить файл из хранилища:', error.message);
   }
 }

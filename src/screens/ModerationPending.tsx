@@ -1,5 +1,6 @@
 // src/screens/ModerationPending.tsx
 import React, { useEffect, useState, useCallback } from 'react';
+import type { RootNavigation } from '../lib/navigation';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
@@ -24,7 +25,7 @@ const STATUS_TEXT: Record<Status, { title: string; body: string }> = {
 };
 
 export default function ModerationPending() {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<RootNavigation>();
   const [status, setStatus] = useState<Status>('pending');
   const [note, setNote] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);

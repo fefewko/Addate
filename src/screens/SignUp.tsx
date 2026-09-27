@@ -1,5 +1,7 @@
 // src/screens/SignUp.tsx
 import React, { useState } from 'react';
+import type { RootNavigation } from '../lib/navigation';
+import { log } from '../lib/log';
 import {
   View,
   Text,
@@ -31,7 +33,7 @@ function mapAuthError(message: string): string {
 }
 
 export default function SignUp() {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<RootNavigation>();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -95,7 +97,7 @@ const { data, error: signUpError } = await supabase.auth.signUp({
     if (profileError) {
       // Пользователь в auth уже создан, профиль — нет. Не блокируем его тут,
       // отправляем на ProfileSetup — там можно повторить insert/upsert.
-      console.warn('Ошибка создания профиля:', profileError.message);
+      log.warn('Ошибка создания профиля:', profileError.message);
     }
 
     navigation.reset({ index: 0, routes: [{ name: 'ProfileSetup' }] });

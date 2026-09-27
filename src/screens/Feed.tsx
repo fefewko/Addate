@@ -1,5 +1,7 @@
 // src/screens/Feed.tsx
 import React, { useEffect, useLayoutEffect, useState, useCallback } from 'react';
+import type { RootNavigation } from '../lib/navigation';
+import { log } from '../lib/log';
 import {
   View,
   Text,
@@ -36,10 +38,8 @@ type Profile = {
 // от сервера вместо клиентского поля distanceKm.
 type FeedRow = Omit<Profile, 'distanceKm'> & { distance_km: number | null };
 
-const AUTO_REFRESH_MS = 60_000;
-
 export default function Feed() {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<RootNavigation>();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [actingOnId, setActingOnId] = useState<string | null>(null);
@@ -58,7 +58,7 @@ export default function Feed() {
         .update({ latitude: position.coords.latitude, longitude: position.coords.longitude })
         .eq('id', userId);
     } catch (e) {
-      console.warn('Не удалось получить геопозицию:', e);
+      log.warn('Не удалось получить геопозицию:', e);
     }
   }, []);
 
@@ -114,7 +114,7 @@ export default function Feed() {
       if (error) {
         setLoading(false);
         setLoadError('Не удалось загрузить анкеты: ' + error.message);
-        console.warn('Ошибка загрузки ленты:', error.message);
+        log.warn('Ошибка загрузки ленты:', error.message);
         return;
       }
 
@@ -130,10 +130,15 @@ export default function Feed() {
   // Лента не перезагружалась никогда, кроме первого открытия: активной
   // перезагрузки и pull-to-refresh не было, и как только список заканчивался,
   // экран показывал «Анкет пока нет» даже когда анкеты в базе были.
+  //
+  // Автообновление по таймеру здесь было вредным по трём причинам: оно
+  // подменяло карточку под пользователем, пока он её читает, и — главное —
+  // каждый вызов loadFeed() дёргал updateMyLocation(), то есть заново просил
+  // разрешение на геолокацию и брал GPS-фикс раз в минуту. Свежие анкеты и так
+  // подтягиваются автоматически: когда очередь кончается, dropFromFeed()
+  // зовёт loadFeed(true) за следующей пачкой.
   useEffect(() => {
     loadFeed();
-    const interval = setInterval(() => loadFeed(true), AUTO_REFRESH_MS);
-    return () => clearInterval(interval);
   }, [loadFeed]);
 
   // Кнопка обновления в шапке. Эффект объявлен после loadFeed, чтобы в

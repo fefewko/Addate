@@ -1,5 +1,6 @@
 // src/screens/Settings.tsx
 import React, { useCallback, useState } from 'react';
+import type { RootNavigation } from '../lib/navigation';
 import { View, Text, TouchableOpacity, StyleSheet, Switch, Alert, ScrollView } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
@@ -15,7 +16,7 @@ import {
 import { colors } from '../lib/theme';
 
 export default function Settings() {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<RootNavigation>();
   // Раньше здесь стоял useState(true), и тумблер не делал ровно ничего:
   // переключение меняло только картинку. Теперь состояние отражает реальное
   // системное разрешение, а переключение либо включает уведомления, либо

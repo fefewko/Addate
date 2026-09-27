@@ -1,5 +1,7 @@
 // src/screens/Chat.tsx
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import type { RootNavigation } from '../lib/navigation';
+import { log } from '../lib/log';
 import {
   View,
   Text,
@@ -41,7 +43,7 @@ const REPORT_CATEGORIES: { value: string; label: string }[] = [
 ];
 
 export default function Chat() {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<RootNavigation>();
   const route = useRoute<any>();
   const { matchId, otherUserId, otherName, otherAge } = route.params;
   const insets = useSafeAreaInsets();
@@ -92,7 +94,7 @@ export default function Chat() {
       .order('created_at', { ascending: true });
 
     if (error) {
-      console.warn('Ошибка загрузки сообщений:', error.message);
+      log.warn('Ошибка загрузки сообщений:', error.message);
       return;
     }
 
@@ -226,7 +228,9 @@ export default function Chat() {
               }
               return;
             }
-            navigation.navigate('ChatList');
+            // ChatList — вкладка нижней навигации, а не экран корневого
+            // стека, поэтому идём через Tabs с указанием вложенного экрана.
+            navigation.navigate('Tabs', { screen: 'ChatList' });
           },
         },
       ]

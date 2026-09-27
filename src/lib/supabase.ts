@@ -2,6 +2,7 @@
 import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
+import { log } from './log';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL as string;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY as string;
@@ -9,7 +10,7 @@ const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY as string;
 if (!supabaseUrl || !supabaseAnonKey) {
   // Если видишь эту ошибку — не заполнен .env или не перезапущен `npx expo start`
   // после его создания (переменные окружения читаются только при старте).
-  console.warn('Supabase env vars отсутствуют — проверь файл .env');
+  log.warn('Supabase env vars отсутствуют — проверь файл .env');
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {

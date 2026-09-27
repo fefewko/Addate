@@ -1,5 +1,6 @@
 // src/screens/Profile.tsx
 import React, { useCallback, useState } from 'react';
+import type { RootNavigation } from '../lib/navigation';
 import {
   View,
   Text,
@@ -31,7 +32,7 @@ const screenWidth = Dimensions.get('window').width;
 const MAX_ADDITIONAL_PHOTOS = 4;
 
 export default function Profile() {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<RootNavigation>();
 
   const [userId, setUserId] = useState<string | null>(null);
   const [email, setEmail] = useState('');

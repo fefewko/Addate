@@ -1,5 +1,7 @@
 // src/screens/IncomingLikes.tsx
 import React, { useCallback, useState } from 'react';
+import type { RootNavigation } from '../lib/navigation';
+import { log } from '../lib/log';
 import { View, Text, Image, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -21,7 +23,7 @@ type IncomingLike = {
 };
 
 export default function IncomingLikes() {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<RootNavigation>();
   const [items, setItems] = useState<IncomingLike[]>([]);
   const [loading, setLoading] = useState(true);
   const [myId, setMyId] = useState<string | null>(null);
@@ -68,7 +70,7 @@ export default function IncomingLikes() {
 
     if (error) {
       setLoadError('Не удалось загрузить лайки: ' + error.message);
-      console.warn('Ошибка загрузки лайков:', error.message);
+      log.warn('Ошибка загрузки лайков:', error.message);
       return;
     }
 
