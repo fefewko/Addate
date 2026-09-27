@@ -39,6 +39,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
+    "test:date": "node scripts/test-date.js",
     "build:apk": "node scripts/build-apk.js",
     "build:apk:universal": "node scripts/build-apk.js --arch all",
     "verify:apk": "node scripts/verify-apk.js"

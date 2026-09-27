@@ -12,11 +12,13 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { colors } from '../lib/theme';
 import DateOfBirthInput from '../ui/DateOfBirthInput';
+import ConsentCheckbox from '../ui/ConsentCheckbox';
 import {
   EMPTY_PARTS,
   partsToIso,
@@ -46,6 +48,10 @@ export default function SignUp() {
   const [password, setPassword] = useState('');
   const [birth, setBirth] = useState<BirthDateParts>(EMPTY_PARTS);
   const [birthError, setBirthError] = useState<string | null>(null);
+  // Согласие с правилами — отдельный факт, а не следствие даты рождения,
+  // поэтому и галочка отдельная, и состояние отдельное.
+  const [accepted, setAccepted] = useState(false);
+  const [consentError, setConsentError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,6 +62,14 @@ export default function SignUp() {
       setError('Заполните email и пароль.');
       return;
     }
+
+    if (!accepted) {
+      setConsentError(
+        'Без согласия с правилами пользоваться сервисом нельзя. Прочитайте правила и отметьте согласие.'
+      );
+      return;
+    }
+    setConsentError(null);
 
     // Галочки «мне есть 18 лет» больше нет: вместо неё спрашивается сама
     // дата рождения, и её нельзя поставить не глядя. Проверка 18+ дублируется
@@ -130,66 +144,88 @@ const { data, error: signUpError } = await supabase.auth.signUp({
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <Text style={styles.title}>Регистрация</Text>
-
-      <Text style={styles.label}>Email</Text>
-      <TextInput
-        style={styles.input}
-        placeholderTextColor={colors.textFaint}
-        placeholder="you@example.com"
-        autoCapitalize="none"
-        keyboardType="email-address"
-        value={email}
-        onChangeText={setEmail}
-      />
-
-      <Text style={styles.label}>Пароль</Text>
-      <TextInput
-        style={styles.input}
-        placeholderTextColor={colors.textFaint}
-        placeholder="Не короче 6 символов"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-      />
-
-      <Text style={styles.label}>Дата рождения</Text>
-      <DateOfBirthInput
-        value={birth}
-        onChange={(next) => {
-          setBirth(next);
-          if (birthError) setBirthError(null);
-        }}
-        error={birthError}
-      />
-      <Text style={styles.hint}>
-        Регистрация только для людей старше 18 лет. Дата рождения видна в анкете
-        как возраст, но не показывается полностью.
-      </Text>
-
-      {error && <Text style={styles.error}>{error}</Text>}
-
-      <TouchableOpacity
-        style={[styles.button, loading && styles.buttonDisabled]}
-        onPress={handleSignUp}
-        disabled={loading}
+      {/* Форма перестала помещаться в экран после добавления даты рождения и
+          согласия: на невысоком экране кнопка уходила под клавиатуру и была
+          недоступна. flexGrow с justifyContent 'center' сохраняет прежнее
+          центрирование на больших экранах и даёт прокрутку на маленьких. */}
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        {loading ? (
-          <ActivityIndicator color={colors.white} />
-        ) : (
-          <Text style={styles.buttonText}>Зарегистрироваться</Text>
-        )}
-      </TouchableOpacity>
+        <Text style={styles.title}>Регистрация</Text>
 
-      <TouchableOpacity onPress={() => navigation.navigate('SignIn')}>
-        <Text style={styles.link}>Уже есть аккаунт? Войти</Text>
-      </TouchableOpacity>
+        <Text style={styles.label}>Email</Text>
+        <TextInput
+          style={styles.input}
+          placeholderTextColor={colors.textFaint}
+          placeholder="you@example.com"
+          autoCapitalize="none"
+          keyboardType="email-address"
+          value={email}
+          onChangeText={setEmail}
+        />
+
+        <Text style={styles.label}>Пароль</Text>
+        <TextInput
+          style={styles.input}
+          placeholderTextColor={colors.textFaint}
+          placeholder="Не короче 6 символов"
+          secureTextEntry
+          value={password}
+          onChangeText={setPassword}
+        />
+
+        <Text style={styles.label}>Дата рождения</Text>
+        <DateOfBirthInput
+          value={birth}
+          onChange={(next) => {
+            setBirth(next);
+            if (birthError) setBirthError(null);
+          }}
+          error={birthError}
+        />
+        <Text style={styles.hint}>
+          Регистрация только для людей старше 18 лет. Дата рождения видна в
+          анкете как возраст, но не показывается полностью.
+        </Text>
+
+        <ConsentCheckbox
+          checked={accepted}
+          onToggle={() => {
+            setAccepted(!accepted);
+            if (consentError) setConsentError(null);
+          }}
+          error={consentError}
+        >
+          Я принимаю правила пользования сервисом и обязуюсь их соблюдать
+        </ConsentCheckbox>
+
+        {error && <Text style={styles.error}>{error}</Text>}
+
+        <TouchableOpacity
+          style={[styles.button, loading && styles.buttonDisabled]}
+          onPress={handleSignUp}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color={colors.white} />
+          ) : (
+            <Text style={styles.buttonText}>Зарегистрироваться</Text>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={() => navigation.navigate('SignIn')}>
+          <Text style={styles.link}>Уже есть аккаунт? Войти</Text>
+        </TouchableOpacity>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: colors.bg },
+  container: { flex: 1, backgroundColor: colors.bg },
+  content: { flexGrow: 1, justifyContent: 'center', padding: 24 },
   title: { fontSize: 24, fontWeight: '600', marginBottom: 24, textAlign: 'center', color: colors.textPrimary },
   label: { fontSize: 13, fontWeight: '600', color: colors.textSecondary, marginBottom: 6, marginLeft: 2 },
   input: {
@@ -206,7 +242,7 @@ const styles = StyleSheet.create({
     color: colors.textFaint,
     fontSize: 12,
     marginTop: 8,
-    marginBottom: 4,
+    marginBottom: 16,
     lineHeight: 16,
   },
   error: { color: colors.danger, marginBottom: 12, fontSize: 14 },
