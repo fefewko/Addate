@@ -192,8 +192,15 @@ function main() {
   console.log('\nПодпись — отладочным ключом android/app/debug.keystore.');
   console.log('Поэтому такой APK не встанет поверх собранного в EAS: подписи');
   console.log('разные, старый сначала нужно удалить с телефона.');
-  console.log('\nPush-уведомления не заработают: нужны FCM-credentials');
-  console.log('(google-services.json), их в проекте нет.');
+  const googleServicesFile = path.join(ANDROID_DIR, 'app', 'google-services.json');
+
+if (fs.existsSync(googleServicesFile)) {
+  console.log('\nFCM: google-services.json найден.');
+  console.log('FCM: Google Services plugin подключен.');
+} else {
+  console.warn('\nВНИМАНИЕ: android/app/google-services.json не найден.');
+  console.warn('Push-уведомления в этом APK могут не работать.');
+}
 }
 
 main();

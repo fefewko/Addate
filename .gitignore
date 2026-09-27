@@ -16,6 +16,8 @@ android/
 # env / secrets
 .env
 .env*.local
+addate-firebase-adminsdk-fbsvc-b65d664302.json
+google-services.json
 
 # logs / debug
 npm-debug.*

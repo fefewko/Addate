@@ -2,7 +2,7 @@
   "expo": {
     "name": "ADDate",
     "slug": "ADDate",
-    "version": "0.0.12",
+    "version": "0.0.13",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "addate",
@@ -17,7 +17,8 @@
         "foregroundImage": "./assets/icon.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.addate.ADDate"
+      "package": "com.addate.ADDate",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "output": "single",
