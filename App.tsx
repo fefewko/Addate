@@ -2,7 +2,13 @@
 import 'react-native-url-polyfill/auto';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, ActivityIndicator, AppState } from 'react-native';
-import { NavigationContainer, DarkTheme, useNavigation, type LinkingOptions } from '@react-navigation/native';
+import {
+  NavigationContainer,
+  DarkTheme,
+  useNavigation,
+  createNavigationContainerRef,
+  type LinkingOptions,
+} from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -27,6 +33,8 @@ import ProfileDetail from './src/screens/ProfileDetail';
 import AuthCallback from './src/screens/AuthCallback';
 import LoadError from './src/ui/LoadError';
 import { resolveInitialRoute, type InitialRoute } from './src/lib/initialRoute';
+import { log } from './src/lib/log';
+import type { RootNavigation, RootParamList } from './src/lib/navigation';
 import { colors } from './src/lib/theme';
 
 const Stack = createNativeStackNavigator();
@@ -69,8 +77,82 @@ const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
 
 const HEARTBEAT_INTERVAL_MS = 45_000;
 
+// Навигация вне дерева компонентов. Нужна для двух случаев, которых не
+// покрывает useNavigation:
+//   * переход по нажатию на push, когда приложение запускается с нуля;
+//   * переход после того, как навигатор смонтирован (onReady).
+const navigationRef = createNavigationContainerRef<RootParamList>();
+
+type PushPayload = {
+  matchId?: string;
+  otherUserId?: string;
+  otherName?: string;
+  otherAge?: number | null;
+};
+
+// Защита от повторной обработки. Нажатие на push при живом приложении
+// обрабатывается подпиской, а при холодном старте — getLastNotificationResponse.
+// Оба пути иногда срабатывают для одного и того же касания.
+let lastHandledNotificationId: string | null = null;
+
+function handleNotificationResponse(response: Notifications.NotificationResponse) {
+  const id = response.notification.request.identifier;
+  if (id && id === lastHandledNotificationId) return;
+  lastHandledNotificationId = id ?? null;
+
+  const data = response.notification.request.content.data as PushPayload | undefined;
+
+  // В разработке полезно видеть, что именно пришло в уведомлении: если
+  // push собирается без otherUserId, диалог не откроется и сработает
+  // запасной переход в список чатов.
+  log.debug('Нажатие на push, payload:', JSON.stringify(data));
+
+  if (!data?.matchId) {
+    log.debug('Нажатие на push без matchId в данных');
+    return;
+  }
+
+  if (!navigationRef.isReady()) {
+    // Навигатор ещё не смонтирован. Ответ не теряем: его доберёт
+    // getLastNotificationResponse в onReady.
+    log.debug('Навигатор не готов, переход отложен до onReady');
+    return;
+  }
+
+  if (data.otherUserId) {
+    navigationRef.navigate('Chat', {
+      matchId: data.matchId,
+      otherUserId: data.otherUserId,
+      otherName: data.otherName,
+      otherAge: data.otherAge ?? undefined,
+    });
+  } else {
+    // В старых уведомлениях полных данных о собеседнике нет — открываем
+    // список чатов. ChatList является вкладкой нижней навигации, а не экраном
+    // корневого стека, поэтому идём через Tabs.
+    navigationRef.navigate('Tabs', { screen: 'ChatList' });
+  }
+
+  // Ответ обработан: сбрасываем, иначе следующий холодный старт снова
+  // откроет этот диалог.
+  Notifications.clearLastNotificationResponseAsync().catch(() => {});
+}
+
+// Приложение могло быть убито, и нажатие на уведомление запустило его с нуля.
+// В этом случае подписка addNotificationResponseReceivedListener не срабатывает
+// никогда — она регистрируется только в живом процессе. Ответ нужно забрать
+// отдельно, и только когда навигатор готов.
+async function handlePendingNotificationResponse() {
+  try {
+    const response = await Notifications.getLastNotificationResponseAsync();
+    if (response) handleNotificationResponse(response);
+  } catch (e) {
+    log.warn('Не удалось прочитать последнее нажатие на уведомление:', e);
+  }
+}
+
 function Tabs() {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<RootNavigation>();
   const [unreadCount, setUnreadCount] = useState(0);
   const heartbeatTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -132,25 +214,11 @@ function Tabs() {
       })
       .subscribe();
 
-    // Тап по push-уведомлению о новом сообщении — сразу открываем список чатов
-    // (полные данные о собеседнике подтянутся уже там, у нас есть только matchId)
-    const notificationSub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data as
-        | { matchId?: string; otherUserId?: string; otherName?: string; otherAge?: number | null }
-        | undefined;
-
-      if (data?.matchId && data?.otherUserId) {
-        navigation.navigate('Chat', {
-          matchId: data.matchId,
-          otherUserId: data.otherUserId,
-          otherName: data.otherName,
-          otherAge: data.otherAge ?? undefined,
-        });
-      } else if (data?.matchId) {
-        // На случай старых уведомлений без полных данных — хотя бы список чатов
-        navigation.navigate('ChatList');
-      }
-    });
+    // Тап по push-уведомлению, когда приложение уже в памяти.
+    // Холодный старт обрабатывается отдельно, в onReady.
+    const notificationSub = Notifications.addNotificationResponseReceivedListener(
+      handleNotificationResponse
+    );
 
     return () => {
       if (heartbeatTimer.current) clearInterval(heartbeatTimer.current);
@@ -269,7 +337,17 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer theme={DarkTheme} linking={linking}>
+    <NavigationContainer
+      ref={navigationRef}
+      theme={DarkTheme}
+      linking={linking}
+      onReady={() => {
+        // Приложение могло быть убито, и нажатие на push запустило его с нуля.
+        // В этом случае подписка не сработала никогда, и переход в диалог
+        // нужно выполнить здесь — навигатор к этому моменту уже готов.
+        handlePendingNotificationResponse();
+      }}
+    >
       {/* key={initialRoute} — начальный маршрут навигатора применяется только
           при первом монтировании, поэтому смена статуса модерации сама по себе
           ни к чему бы не привела. Ключ заставляет стек пересобраться, когда
