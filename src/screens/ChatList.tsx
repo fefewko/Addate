@@ -19,6 +19,8 @@ type MatchRow = {
   user_a: string;
   user_b: string;
   matched_at: string | null;
+  last_message_at: string | null;
+  last_message_preview: string | null;
   user_a_profile: { display_name: string | null; photo_url: string | null; birth_date: string | null } | null;
   user_b_profile: { display_name: string | null; photo_url: string | null; birth_date: string | null } | null;
 };
@@ -30,8 +32,23 @@ type MatchItem = {
   otherAge: number | null;
   otherPhoto: string | null;
   matchedAt: string | null;
+  lastMessageAt: string | null;
+  lastMessagePreview: string | null;
   hasUnread: boolean;
 };
+
+// «5 мин», «2 ч», «3 дн» — для времени последнего сообщения в списке диалогов.
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return 'сейчас';
+  if (minutes < 60) return `${minutes} мин`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} ч`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days} дн`;
+  return new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+}
 
 export default function ChatList() {
   const navigation = useNavigation<any>();
@@ -57,12 +74,19 @@ export default function ChatList() {
     const { data, error } = await supabase
       .from('matches')
       .select(
-        `id, user_a, user_b, matched_at,
+        `id, user_a, user_b, matched_at, last_message_at, last_message_preview,
          user_a_profile:profiles!matches_user_a_fkey (display_name, photo_url, birth_date),
          user_b_profile:profiles!matches_user_b_fkey (display_name, photo_url, birth_date)`
       )
       .eq('status', 'matched')
       .or(`user_a.eq.${user.id},user_b.eq.${user.id}`)
+      // Порядок диалогов задаёт свежесть переписки, а не дата совпадения.
+      // Раньше сортировали по matched_at, и чат с сегодняшним сообщением
+      // оказывался ниже чата, который зародился месяц назад и давно молчит.
+      // Сортировку делает база: клиенту тянуть всю переписку ради порядка
+      // было бы слишком дорого, поэтому последнее сообщение держится
+      // в matches триггером (миграция 20260926000006).
+      .order('last_message_at', { ascending: false, nullsFirst: false })
       .order('matched_at', { ascending: false });
 
     if (error) {
@@ -109,6 +133,8 @@ export default function ChatList() {
         otherAge: calcAge(otherProfile?.birth_date ?? null),
         otherPhoto: otherProfile?.photo_url || null,
         matchedAt: m.matched_at,
+        lastMessageAt: m.last_message_at,
+        lastMessagePreview: m.last_message_preview,
         hasUnread: unreadMatchIds.has(m.id),
       };
     });
@@ -186,12 +212,18 @@ export default function ChatList() {
             </View>
           )}
           <View style={styles.rowBody}>
-            <Text style={styles.name}>
-              {item.otherName}
-              {item.otherAge ? `, ${item.otherAge}` : ''}
-            </Text>
-            <Text style={styles.hint}>
-              {item.hasUnread ? 'Новое сообщение' : 'Нажмите, чтобы открыть переписку'}
+            <View style={styles.rowTop}>
+              <Text style={styles.name} numberOfLines={1}>
+                {item.otherName}
+                {item.otherAge ? `, ${item.otherAge}` : ''}
+              </Text>
+              {item.lastMessageAt && <Text style={styles.time}>{timeAgo(item.lastMessageAt)}</Text>}
+            </View>
+            <Text
+              style={[styles.hint, item.hasUnread && styles.hintUnread]}
+              numberOfLines={1}
+            >
+              {item.lastMessagePreview || 'Переписка ещё не началась'}
             </Text>
           </View>
           {item.hasUnread && <View style={styles.unreadDot} />}
@@ -217,7 +249,10 @@ const styles = StyleSheet.create({
   avatarPlaceholder: { alignItems: 'center', justifyContent: 'center' },
   avatarPlaceholderText: { fontSize: 18, fontWeight: '600', color: colors.textMuted },
   rowBody: { flex: 1 },
-  name: { fontSize: 16, fontWeight: '600', color: colors.textPrimary },
+  rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  name: { fontSize: 16, fontWeight: '600', color: colors.textPrimary, flexShrink: 1 },
+  time: { fontSize: 12, color: colors.textFaint },
   hint: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
+  hintUnread: { color: colors.textPrimary, fontWeight: '600' },
   unreadDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.accent, marginLeft: 8 },
 });
