@@ -10,7 +10,7 @@ npm run build:web
 npm run serve:web
 ```
 
-Подробности о выкладке на Cloudflare и о том, что на вебе работает, а что нет, — в [WEB_DEPLOY.md](WEB_DEPLOY.md).
+Выкладка на Cloudflare: `npm run merge:web -- <корень сайта>`, затем `npm run verify:site -- <корень сайта>`. Подробности — в [WEB_DEPLOY.md](WEB_DEPLOY.md).
 
 ### Android APK
 
@@ -25,7 +25,9 @@ npm run verify:apk
 ## Проверки
 
 ```
-npm run test:date   # расчёт возраста и разбор даты рождения
-npm run build:web   # собирает веб-версию и проверяет результат
-npm run verify:apk  # проверяет содержимое собранного APK
+npm run test:date     # расчёт возраста и разбор даты рождения
+npm run test:web      # определение формата картинки и адреса /web
+npm run build:web     # собирает веб-версию и проверяет результат
+npm run verify:site   # проверяет слитый сайт так же, как его отдаст Cloudflare
+npm run verify:apk    # проверяет содержимое собранного APK
 ```

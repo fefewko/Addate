@@ -1,1 +1,21 @@
+# Маршруты веб-версии ADDate для Cloudflare Pages.
+#
+# Файл читается только из корня проекта, а не из web/ — при выкладке эти
+# строки нужно дописать в существующий _redirects сайта, а не создать новый
+# файл рядом с приложением.
+#
+# ПОРЯДОК КРИТИЧЕН. Cloudflare прямо предупреждает: "Redirects are always
+# followed, regardless of whether or not an asset matches the incoming
+# request". То есть правило /web/* перехватывает ВСЁ внутри /web, включая
+# запросы к файлам. Без строк для ассетов ниже запрос бандла
+# /web/_expo/static/js/web/AppEntry-<hash>.js получил бы index.html,
+# браузер попытался выполнить HTML как скрипт — и страница осталась бы белой
+# без единой ошибки в консоли.
+#
+# Проверено локально на сервере, который повторяет это поведение:
+# scripts/verify-site.js.
+/web  /web/  301
+/web/_expo/*  /web/_expo/:splat  200
+/web/assets/*  /web/assets/:splat  200
+/web/favicon.ico  /web/favicon.ico  200
 /web/*  /web/index.html  200
