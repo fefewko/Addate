@@ -7,7 +7,6 @@ import {
   DarkTheme,
   useNavigation,
   createNavigationContainerRef,
-  type LinkingOptions,
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -16,6 +15,7 @@ import * as Notifications from 'expo-notifications';
 
 import { supabase } from './src/lib/supabase';
 import { registerForPushNotifications } from './src/lib/pushNotifications';
+import { isWeb, buildLinking, documentTitleFormatter } from './src/lib/webLinks';
 
 import SignIn from './src/screens/SignIn';
 import SignUp from './src/screens/SignUp';
@@ -32,6 +32,7 @@ import IncomingLikes from './src/screens/IncomingLikes';
 import ProfileDetail from './src/screens/ProfileDetail';
 import AuthCallback from './src/screens/AuthCallback';
 import LoadError from './src/ui/LoadError';
+import AlertHost from './src/ui/AlertHost';
 import { resolveInitialRoute, type InitialRoute } from './src/lib/initialRoute';
 import { log } from './src/lib/log';
 import type { RootNavigation, RootParamList } from './src/lib/navigation';
@@ -44,30 +45,10 @@ const Tab = createBottomTabNavigator();
 // (addate://auth/callback?code=...) не доходила до приложения, и подтверждение
 // email было невозможно завершить.
 //
-// Вложенные пути вкладок получили имена 'all', 'chats' и 'me' — намеренно.
-// Схема 'profile' занята полной анкетой (profile/:profileId), и если бы
-// вкладка профиля называлась так же, пути стали бы неоднозначными.
-const linking: LinkingOptions<any> = {
-  prefixes: ['addate://'],
-  config: {
-    screens: {
-      AuthCallback: 'auth/callback',
-      Tabs: {
-        screens: {
-          Feed: '',
-          AllUsers: 'all',
-          ChatList: 'chats',
-          Profile: 'me',
-        },
-      },
-      ProfileDetail: 'profile/:profileId',
-      Chat: 'chat/:matchId',
-      Settings: 'settings',
-      BlockedUsers: 'blocked',
-      IncomingLikes: 'likes',
-    },
-  },
-};
+// Сам конфиг вынесен в webLinks.ts вместе с разбором путей под /web: там
+// живут и адреса, и объяснение, почему на вебе путь ленты не может быть
+// пустым (иначе '/web/' открывал бы ленту мимо проверки сессии).
+const linking = buildLinking();
 const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   Feed: 'flame',
   AllUsers: 'people',
@@ -143,6 +124,8 @@ function handleNotificationResponse(response: Notifications.NotificationResponse
 // никогда — она регистрируется только в живом процессе. Ответ нужно забрать
 // отдельно, и только когда навигатор готов.
 async function handlePendingNotificationResponse() {
+  if (isWeb()) return;
+
   try {
     const response = await Notifications.getLastNotificationResponseAsync();
     if (response) handleNotificationResponse(response);
@@ -216,16 +199,18 @@ function Tabs() {
 
     // Тап по push-уведомлению, когда приложение уже в памяти.
     // Холодный старт обрабатывается отдельно, в onReady.
-    const notificationSub = Notifications.addNotificationResponseReceivedListener(
-      handleNotificationResponse
-    );
+    // На вебе подписка не имеет смысла: expo-notifications не поддерживает
+    // браузер, и она лишь сыплет предупреждениями в консоль на каждом входе.
+    const notificationSub = isWeb()
+      ? null
+      : Notifications.addNotificationResponseReceivedListener(handleNotificationResponse);
 
     return () => {
       if (heartbeatTimer.current) clearInterval(heartbeatTimer.current);
       if (unreadTimer) clearTimeout(unreadTimer);
       appStateSub.remove();
       supabase.removeChannel(channel);
-      notificationSub.remove();
+      notificationSub?.remove();
     };
   }, [sendHeartbeat, refreshUnreadCount, navigation]);
 
@@ -337,10 +322,16 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer
-      ref={navigationRef}
-      theme={DarkTheme}
-      linking={linking}
+    <>
+      {/* AlertHost живёт над навигатором: внутри стека его Modal закрывался бы
+          вместе с экраном при переходе. На нативе он ничего не рисует — там
+          диалоги показывает системный Alert. */}
+      <AlertHost />
+      <NavigationContainer
+        ref={navigationRef}
+        theme={DarkTheme}
+        linking={linking}
+        documentTitle={{ formatter: documentTitleFormatter }}
       onReady={() => {
         // Приложение могло быть убито, и нажатие на push запустило его с нуля.
         // В этом случае подписка не сработала никогда, и переход в диалог
@@ -390,6 +381,7 @@ export default function App() {
           options={{ title: 'Вы понравились', headerStyle: { backgroundColor: colors.bg }, headerTintColor: colors.textPrimary }}
         />
       </Stack.Navigator>
-    </NavigationContainer>
+      </NavigationContainer>
+    </>
   );
 }

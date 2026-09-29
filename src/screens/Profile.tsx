@@ -1,19 +1,8 @@
 // src/screens/Profile.tsx
 import React, { useCallback, useState } from 'react';
 import type { RootNavigation } from '../lib/navigation';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  Image,
-  ActivityIndicator,
-  StyleSheet,
-  Alert,
-  Modal,
-  Dimensions,
-} from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, Image, ActivityIndicator, StyleSheet, Modal, Dimensions } from 'react-native';
+import { appAlert } from '../lib/alert';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -142,7 +131,7 @@ export default function Profile() {
   async function handleChangeMainPhoto() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Нужен доступ', 'Разрешите доступ к галерее.');
+      appAlert.alert('Нужен доступ', 'Разрешите доступ к галерее.');
       return;
     }
 
@@ -163,20 +152,20 @@ export default function Profile() {
         setPhotoUrl(url);
       }
     } catch (e: any) {
-      Alert.alert('Ошибка', 'Не удалось загрузить фото: ' + e.message);
+      appAlert.alert('Ошибка', 'Не удалось загрузить фото: ' + e.message);
     }
     setUploadingPhoto(false);
   }
 
   async function handleAddPhoto() {
     if (additionalPhotos.length >= MAX_ADDITIONAL_PHOTOS) {
-      Alert.alert('Лимит фото', `Можно добавить не больше ${MAX_ADDITIONAL_PHOTOS} дополнительных фото.`);
+      appAlert.alert('Лимит фото', `Можно добавить не больше ${MAX_ADDITIONAL_PHOTOS} дополнительных фото.`);
       return;
     }
 
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Нужен доступ', 'Разрешите доступ к галерее.');
+      appAlert.alert('Нужен доступ', 'Разрешите доступ к галерее.');
       return;
     }
 
@@ -199,13 +188,13 @@ export default function Profile() {
         setAdditionalPhotos(updated);
       }
     } catch (e: any) {
-      Alert.alert('Ошибка', 'Не удалось загрузить фото: ' + e.message);
+      appAlert.alert('Ошибка', 'Не удалось загрузить фото: ' + e.message);
     }
     setUploadingPhoto(false);
   }
 
   function handleRemovePhoto(url: string) {
-    Alert.alert('Удалить фото?', '', [
+    appAlert.alert('Удалить фото?', '', [
       { text: 'Отмена', style: 'cancel' },
       {
         text: 'Удалить',
@@ -219,7 +208,7 @@ export default function Profile() {
             .eq('id', userId);
 
           if (error) {
-            Alert.alert('Ошибка', 'Не удалось убрать фото: ' + error.message);
+            appAlert.alert('Ошибка', 'Не удалось убрать фото: ' + error.message);
             return;
           }
 
@@ -251,12 +240,12 @@ export default function Profile() {
     setSaving(false);
 
     if (error) {
-      Alert.alert('Ошибка', 'Не удалось сохранить: ' + error.message);
+      appAlert.alert('Ошибка', 'Не удалось сохранить: ' + error.message);
       return;
     }
 
     setOriginal({ city, heightCm, weightKg, bio, sobrietyStatus, substances });
-    Alert.alert('Сохранено', 'Изменения профиля сохранены.');
+    appAlert.alert('Сохранено', 'Изменения профиля сохранены.');
   }
 
   React.useLayoutEffect(() => {

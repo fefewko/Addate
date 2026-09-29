@@ -5,17 +5,8 @@
 //
 import React, { useCallback, useEffect, useState } from 'react';
 import type { RootNavigation } from '../lib/navigation';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ActivityIndicator,
-  StyleSheet,
-  ScrollView,
-  Image,
-  Alert,
-} from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet, ScrollView, Image } from 'react-native';
+import { appAlert } from '../lib/alert';
 import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../lib/supabase';
@@ -115,7 +106,7 @@ export default function ProfileSetup() {
   async function pickPhoto() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Нужен доступ', 'Разрешите доступ к галерее, чтобы выбрать фото.');
+      appAlert.alert('Нужен доступ', 'Разрешите доступ к галерее, чтобы выбрать фото.');
       return;
     }
 

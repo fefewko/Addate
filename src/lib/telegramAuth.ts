@@ -1,5 +1,5 @@
 // src/lib/telegramAuth.ts
-import { Linking } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import { supabase } from './supabase';
 
 export type TelegramLoginResult =
@@ -14,6 +14,17 @@ const MAX_ATTEMPTS = 60; // 60 * 2с = 2 минуты на подтвержде�
 // Реального deep-link обратно в приложение не требуется — как только
 // telegram-exchange увидит статус 'confirmed', сессия создаётся тут же.
 export async function loginWithTelegram(): Promise<TelegramLoginResult> {
+  // Вход устроен через схему tg://, которую браузер открыть не может: там
+  // нужен официальный Telegram Login Widget с доменом, прописанным боту.
+  // Пока виджет не сделан, честнее отказать сразу, чем две минуты опрашивать
+  // сервер впустую и кончиться таймаутом без объяснения.
+  if (Platform.OS === 'web') {
+    return {
+      status: 'error',
+      message: 'Вход через Telegram доступен только в приложении. Войдите по email и паролю.',
+    };
+  }
+
   const { data: startData, error: startError } = await supabase.functions.invoke('telegram-start', {
     method: 'POST',
   });

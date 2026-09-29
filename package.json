@@ -40,6 +40,9 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "test:date": "node scripts/test-date.js",
+    "test:web": "node scripts/test-web-logic.js",
+    "build:web": "node scripts/build-web.js",
+    "serve:web": "node scripts/serve-web.js",
     "build:apk": "node scripts/build-apk.js",
     "build:apk:universal": "node scripts/build-apk.js --arch all",
     "verify:apk": "node scripts/verify-apk.js"

@@ -22,7 +22,17 @@
     },
     "web": {
       "output": "single",
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "name": "ADDate",
+      "shortName": "ADDate",
+      "lang": "ru",
+      "themeColor": "#121212",
+      "backgroundColor": "#121212",
+      "description": "Знакомства для своих",
+      "display": "standalone",
+      "orientation": "portrait",
+      "startUrl": "/web",
+      "scope": "/web"
     },
     "plugins": [
       [
@@ -53,7 +63,8 @@
       ]
     ],
     "experiments": {
-      "reactCompiler": true
+      "reactCompiler": true,
+      "baseUrl": "/web"
     },
     "extra": {
       "eas": {

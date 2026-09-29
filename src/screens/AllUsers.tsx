@@ -2,22 +2,8 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { RootNavigation } from '../lib/navigation';
 import { log } from '../lib/log';
-import {
-  View,
-  Text,
-  Image,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  ScrollView,
-  Alert,
-  Modal,
-  PanResponder,
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import { View, Text, Image, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView, Modal, PanResponder, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
+import { appAlert } from '../lib/alert';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -318,7 +304,7 @@ function QuickChatModal({
     const { error } = await supabase.from('messages').insert({ match_id: matchId, sender_id: myId, content });
     setSending(false);
     if (error) {
-      Alert.alert('Ошибка', 'Не удалось отправить сообщение.');
+      appAlert.alert('Ошибка', 'Не удалось отправить сообщение.');
       setText(content);
     }
   }
@@ -328,7 +314,7 @@ function QuickChatModal({
 
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Нужен доступ', 'Разрешите доступ к галерее, чтобы отправить фото.');
+      appAlert.alert('Нужен доступ', 'Разрешите доступ к галерее, чтобы отправить фото.');
       return;
     }
 
@@ -345,7 +331,7 @@ function QuickChatModal({
       const { error } = await supabase.from('messages').insert({ match_id: matchId, sender_id: myId, image_path: path });
       if (error) throw new Error(error.message);
     } catch (e: any) {
-      Alert.alert('Ошибка', 'Не удалось отправить фото: ' + e.message);
+      appAlert.alert('Ошибка', 'Не удалось отправить фото: ' + e.message);
     }
     setUploadingImage(false);
   }
@@ -616,7 +602,7 @@ export default function AllUsers() {
     }
 
     if (result.matched) {
-      Alert.alert('Это совпадение! 🎉', `Вы с ${target.display_name || 'этим человеком'} понравились друг другу.`, [
+      appAlert.alert('Это совпадение! 🎉', `Вы с ${target.display_name || 'этим человеком'} понравились друг другу.`, [
         {
           text: 'Написать сообщение',
           onPress: () => setQuickChat({ matchId: result.matchId, otherName: target.display_name }),

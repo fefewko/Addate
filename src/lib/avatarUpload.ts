@@ -1,6 +1,7 @@
 // src/lib/avatarUpload.ts
 import { supabase } from './supabase';
 import { log } from './log';
+import { imageFormatForUpload } from './imageBytes';
 
 // Загружает фото в публичный бакет avatars по пути {userId}/{fileName}.{ext}
 // и возвращает публичный URL с меткой времени (чтобы не показывалась закэшированная
@@ -9,12 +10,16 @@ import { log } from './log';
 export async function uploadAvatarPhoto(userId: string, uri: string, fileName: string): Promise<string> {
   const response = await fetch(uri);
   const arrayBuffer = await response.arrayBuffer();
-  const fileExt = uri.split('.').pop() || 'jpg';
-  const filePath = `${userId}/${fileName}.${fileExt}`;
+
+  // Формат берётся из содержимого файла, а не из URI: на вебе пикер отдаёт
+  // blob:https://... без расширения, и разбор ссылки давал в качестве
+  // расширения домен. Подробности в imageBytes.ts.
+  const { ext, mimeType } = imageFormatForUpload(arrayBuffer);
+  const filePath = `${userId}/${fileName}.${ext}`;
 
   const { error } = await supabase.storage
     .from('avatars')
-    .upload(filePath, arrayBuffer, { contentType: `image/${fileExt}`, upsert: true });
+    .upload(filePath, arrayBuffer, { contentType: mimeType, upsert: true });
 
   if (error) throw new Error(error.message);
 

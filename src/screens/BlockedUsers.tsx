@@ -1,6 +1,7 @@
 // src/screens/BlockedUsers.tsx
 import React, { useCallback, useState } from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { appAlert } from '../lib/alert';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import LoadError from '../ui/LoadError';
@@ -70,7 +71,7 @@ export default function BlockedUsers() {
   );
 
   function handleUnblock(item: BlockedItem) {
-    Alert.alert('Разблокировать?', `${item.displayName} снова сможет видеть вашу анкету и писать вам.`, [
+    appAlert.alert('Разблокировать?', `${item.displayName} снова сможет видеть вашу анкету и писать вам.`, [
       { text: 'Отмена', style: 'cancel' },
       {
         text: 'Разблокировать',

@@ -2,7 +2,8 @@
 import React, { useCallback, useState } from 'react';
 import type { RootNavigation } from '../lib/navigation';
 import { log } from '../lib/log';
-import { View, Text, Image, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
+import { appAlert } from '../lib/alert';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '../lib/supabase';
@@ -106,7 +107,7 @@ export default function IncomingLikes() {
 
     if (result.matched) {
       const age = calcAge(item.birthDate);
-      Alert.alert('Это совпадение! 🎉', `Вы с ${item.displayName || 'этим человеком'} понравились друг другу.`, [
+      appAlert.alert('Это совпадение! 🎉', `Вы с ${item.displayName || 'этим человеком'} понравились друг другу.`, [
         {
           text: 'Написать сообщение',
           onPress: () =>

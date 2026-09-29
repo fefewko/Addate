@@ -1,12 +1,14 @@
 // src/screens/Settings.tsx
 import React, { useCallback, useState } from 'react';
 import type { RootNavigation } from '../lib/navigation';
-import { View, Text, TouchableOpacity, StyleSheet, Switch, Alert, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Switch, ScrollView } from 'react-native';
+import { appAlert } from '../lib/alert';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
 import { supabase } from '../lib/supabase';
 import { openSupportChat } from '../lib/support';
+import { isWeb } from '../lib/webLinks';
 import {
   getNotificationsEnabled,
   enableNotifications,
@@ -43,7 +45,7 @@ export default function Settings() {
       if (next) {
         const ok = await enableNotifications();
         if (!ok) {
-          Alert.alert(
+          appAlert.alert(
             'Нет доступа',
             'Разрешите уведомления в настройках телефона, иначе включить их не получится.'
           );
@@ -63,7 +65,9 @@ export default function Settings() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Нет доступа', 'Разрешите доступ к геопозиции в настройках телефона.');
+        appAlert.alert('Нет доступа', isWeb()
+          ? 'Разрешите доступ к геопозиции в браузере: он спросит об этом сам, когда вы нажмёте кнопку выше.'
+          : 'Разрешите доступ к геопозиции в настройках телефона.');
         setUpdatingLocation(false);
         return;
       }
@@ -77,9 +81,9 @@ export default function Settings() {
           .update({ latitude: position.coords.latitude, longitude: position.coords.longitude })
           .eq('id', user.id);
       }
-      Alert.alert('Готово', 'Геопозиция обновлена.');
+      appAlert.alert('Готово', 'Геопозиция обновлена.');
     } catch (e: any) {
-      Alert.alert('Ошибка', 'Не удалось обновить геопозицию: ' + e.message);
+      appAlert.alert('Ошибка', 'Не удалось обновить геопозицию: ' + e.message);
     }
     setUpdatingLocation(false);
   }
@@ -101,11 +105,11 @@ export default function Settings() {
     // Раньше был молчаливый return: кнопка «Удалить анкету» просто ничего
     // не делала, и пользователь думал, что сломалось приложение.
     if (!user) {
-      Alert.alert('Нужно войти', 'Войдите в аккаунт, чтобы удалить анкету.');
+      appAlert.alert('Нужно войти', 'Войдите в аккаунт, чтобы удалить анкету.');
       return;
     }
 
-    Alert.alert(
+    appAlert.alert(
       'Удалить анкету?',
       'Анкета, фото, совпадения и переписки будут удалены безвозвратно. Само действие необратимо.',
       [
@@ -118,7 +122,7 @@ export default function Settings() {
             // ссылающиеся на неё (см. schema.sql, ON DELETE CASCADE).
             const { error } = await supabase.from('profiles').delete().eq('id', user.id);
             if (error) {
-              Alert.alert('Ошибка', 'Не удалось удалить анкету: ' + error.message);
+              appAlert.alert('Ошибка', 'Не удалось удалить анкету: ' + error.message);
               return;
             }
             await supabase.auth.signOut();
@@ -131,20 +135,29 @@ export default function Settings() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.sectionTitle}>Уведомления</Text>
-      <View style={styles.row}>
-        <Text style={styles.rowLabel}>Push-уведомления о совпадениях и сообщениях</Text>
-        <Switch
-          value={notificationsEnabled}
-          onValueChange={handleToggleNotifications}
-          disabled={notificationsBusy}
-          trackColor={{ false: colors.border, true: colors.accent }}
-        />
-      </View>
-      <Text style={styles.hint}>
-        Выключение снимает push-токен этого устройства. Разрешение операционной
-        системы при этом остаётся — его можно вернуть тумблером.
-      </Text>
+      {/* Раздел уведомлений на вебе скрыт целиком, а не просто выключен.
+          Push в браузере не работает: expo-notifications не имеет веб-реализации,
+          а тумблер всё равно выглядел бы как рабочий и молча ничего не делал.
+          Сообщения и так приходят в реальном времени через Supabase realtime,
+          пока вкладка открыта. */}
+      {!isWeb() && (
+        <>
+          <Text style={styles.sectionTitle}>Уведомления</Text>
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Push-уведомления о совпадениях и сообщениях</Text>
+            <Switch
+              value={notificationsEnabled}
+              onValueChange={handleToggleNotifications}
+              disabled={notificationsBusy}
+              trackColor={{ false: colors.border, true: colors.accent }}
+            />
+          </View>
+          <Text style={styles.hint}>
+            Выключение снимает push-токен этого устройства. Разрешение операционной
+            системы при этом остаётся — его можно вернуть тумблером.
+          </Text>
+        </>
+      )}
 
       <Text style={styles.sectionTitle}>Геопозиция</Text>
       <TouchableOpacity style={styles.actionRow} onPress={handleUpdateLocation} disabled={updatingLocation}>

@@ -6,6 +6,13 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
 
+// В браузере push-уведомлений нет. Важно: Device.isDevice на вебе возвращает
+// true, поэтому проверять только его нельзя — раньше регистрация токена
+// запускалась при каждом открытии страницы, уходила в expo-notifications без
+// веб-реализации, падала там и молча проглатывалась catch. Проверка именно
+// платформы, а не устройства, закрывает и все остальные вызовы отсюда.
+const SUPPORTED = Platform.OS !== 'web';
+
 // Показывать уведомление баннером, даже если приложение открыто на переднем плане —
 // иначе по умолчанию Expo молчит, пока пользователь смотрит в экран.
 //
@@ -13,16 +20,23 @@ import { supabase } from './supabase';
 // shouldShowList — запись в шторке уведомлений / Центре уведомлений.
 // Это два разных поля начиная с Expo SDK 54: старое shouldShowAlert больше
 // не влияет на поведение, его заменили именно этими двумя.
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+//
+// На вебе обработчик не нужен и только добавляет предупреждение в консоль,
+// поэтому не устанавливается вовсе.
+if (SUPPORTED) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+}
 
 export async function registerForPushNotifications(): Promise<void> {
+  if (!SUPPORTED) return;
+
   try {
     if (!Device.isDevice) {
       return; // пуши не работают в симуляторе/эмуляторе без реального устройства
@@ -93,6 +107,8 @@ async function getCurrentToken(): Promise<string | null> {
 // иначе выход на телефоне A отключил бы уведомления на телефоне B, где
 // пользователь всё ещё в аккаунте.
 export async function unregisterPushToken(): Promise<void> {
+  if (!SUPPORTED) return;
+
   try {
     const token = await getCurrentToken();
     if (!token) return;
@@ -130,6 +146,7 @@ function isAllowed(perms: Notifications.NotificationPermissionsStatus): boolean 
 // Состояние разрешения на уведомления. Раньше тумблер в настройках был
 // обычным локальным useState и не делал вообще ничего.
 export async function getNotificationsEnabled(): Promise<boolean> {
+  if (!SUPPORTED) return false;
   if (!Device.isDevice) return false;
 
   return isAllowed(await Notifications.getPermissionsAsync());
@@ -137,6 +154,7 @@ export async function getNotificationsEnabled(): Promise<boolean> {
 
 // Включение: спрашиваем системное разрешение и перерегистрировываем токен.
 export async function enableNotifications(): Promise<boolean> {
+  if (!SUPPORTED) return false;
   if (!Device.isDevice) return false;
 
   const existing = await Notifications.getPermissionsAsync();

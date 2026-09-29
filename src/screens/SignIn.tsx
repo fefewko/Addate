@@ -1,17 +1,8 @@
 // src/screens/SignIn.tsx
 import React, { useState } from 'react';
 import type { RootNavigation } from '../lib/navigation';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ActivityIndicator,
-  StyleSheet,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import { appAlert } from '../lib/alert';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { loginWithTelegram } from '../lib/telegramAuth';
@@ -106,13 +97,13 @@ export default function SignIn() {
 
     if (result.status === 'error') {
       setTelegramLoading(false);
-      Alert.alert('Не получилось', result.message);
+      appAlert.alert('Не получилось', result.message);
       return;
     }
 
     if (result.status === 'timeout') {
       setTelegramLoading(false);
-      Alert.alert(
+      appAlert.alert(
         'Время вышло',
         'Не увидели подтверждение от Telegram. Если вы нажали Start в боте, просто попробуйте ещё раз.'
       );
@@ -126,7 +117,7 @@ export default function SignIn() {
     setTelegramLoading(false);
 
     if (!user) {
-      Alert.alert('Ошибка', 'Не удалось получить данные пользователя после входа.');
+      appAlert.alert('Ошибка', 'Не удалось получить данные пользователя после входа.');
       return;
     }
 
@@ -143,11 +134,11 @@ export default function SignIn() {
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim());
 
     if (resetError) {
-      Alert.alert('Ошибка', 'Не удалось отправить письмо. Проверьте email и попробуйте ещё раз.');
+      appAlert.alert('Ошибка', 'Не удалось отправить письмо. Проверьте email и попробуйте ещё раз.');
       return;
     }
 
-    Alert.alert(
+    appAlert.alert(
       'Письмо отправлено',
       'Проверьте почту — там будет ссылка для сброса пароля. Если письма нет, загляните в папку "Спам".'
     );

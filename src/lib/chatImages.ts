@@ -1,5 +1,6 @@
 // src/lib/chatImages.ts
 import { supabase } from './supabase';
+import { imageFormatForUpload } from './imageBytes';
 
 const SIGNED_URL_TTL_SECONDS = 60 * 60; // час
 
@@ -15,12 +16,15 @@ const SIGNED_URL_TTL_SECONDS = 60 * 60; // час
 export async function uploadChatImage(matchId: string, uri: string): Promise<string> {
   const response = await fetch(uri);
   const arrayBuffer = await response.arrayBuffer();
-  const fileExt = uri.split('.').pop() || 'jpg';
-  const path = `${matchId}/${Date.now()}.${fileExt}`;
+
+  // Формат определяется по байтам: на вебе URI вида blob:https://... не
+  // содержит расширения, и старый разбор ссылки писал в путь мусор.
+  const { ext, mimeType } = imageFormatForUpload(arrayBuffer);
+  const path = `${matchId}/${Date.now()}.${ext}`;
 
   const { error } = await supabase.storage
     .from('chat-images')
-    .upload(path, arrayBuffer, { contentType: `image/${fileExt}` });
+    .upload(path, arrayBuffer, { contentType: mimeType });
 
   if (error) throw new Error(error.message);
 

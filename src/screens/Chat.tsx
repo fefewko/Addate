@@ -2,21 +2,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { RootNavigation } from '../lib/navigation';
 import { log } from '../lib/log';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  FlatList,
-  Image,
-  Modal,
-  ActivityIndicator,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-  ActionSheetIOS,
-} from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, FlatList, Image, Modal, ActivityIndicator, StyleSheet, KeyboardAvoidingView, Platform, ActionSheetIOS } from 'react-native';
+import { appAlert } from '../lib/alert';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
@@ -169,7 +156,7 @@ export default function Chat() {
     setSending(false);
 
     if (error) {
-      Alert.alert('Ошибка', 'Не удалось отправить сообщение.');
+      appAlert.alert('Ошибка', 'Не удалось отправить сообщение.');
       setText(content); // возвращаем текст в поле, чтобы не потерять
     }
   }
@@ -179,7 +166,7 @@ export default function Chat() {
 
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Нужен доступ', 'Разрешите доступ к галерее, чтобы отправить фото.');
+      appAlert.alert('Нужен доступ', 'Разрешите доступ к галерее, чтобы отправить фото.');
       return;
     }
 
@@ -200,13 +187,13 @@ export default function Chat() {
       });
       if (error) throw new Error(error.message);
     } catch (e: any) {
-      Alert.alert('Ошибка', 'Не удалось отправить фото: ' + e.message);
+      appAlert.alert('Ошибка', 'Не удалось отправить фото: ' + e.message);
     }
     setUploadingImage(false);
   }
 
   async function handleBlock() {
-    Alert.alert(
+    appAlert.alert(
       'Заблокировать пользователя?',
       `${otherName || 'Этот человек'} больше не сможет вам писать, и вы не увидите его(её) анкету.`,
       [
@@ -222,9 +209,9 @@ export default function Chat() {
             });
             if (error) {
               if (error.message.includes('Нельзя заблокировать поддержку')) {
-                Alert.alert('Нельзя заблокировать', 'Аккаунт поддержки заблокировать нельзя.');
+                appAlert.alert('Нельзя заблокировать', 'Аккаунт поддержки заблокировать нельзя.');
               } else {
-                Alert.alert('Ошибка', 'Не удалось заблокировать пользователя.');
+                appAlert.alert('Ошибка', 'Не удалось заблокировать пользователя.');
               }
               return;
             }
@@ -252,7 +239,7 @@ export default function Chat() {
         }
       );
     } else {
-      Alert.alert(
+      appAlert.alert(
         'Пожаловаться',
         'Выберите причину',
         [
@@ -275,10 +262,10 @@ export default function Chat() {
     });
 
     if (error) {
-      Alert.alert('Ошибка', 'Не удалось отправить жалобу.');
+      appAlert.alert('Ошибка', 'Не удалось отправить жалобу.');
       return;
     }
-    Alert.alert('Спасибо', 'Жалоба отправлена на рассмотрение модератору.');
+    appAlert.alert('Спасибо', 'Жалоба отправлена на рассмотрение модератору.');
   }
 
   return (

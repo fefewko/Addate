@@ -2,21 +2,12 @@
 import React, { useState } from 'react';
 import type { RootNavigation } from '../lib/navigation';
 import { log } from '../lib/log';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ActivityIndicator,
-  StyleSheet,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-} from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { appAlert } from '../lib/alert';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { colors } from '../lib/theme';
+import { emailRedirectUrl } from '../lib/webLinks';
 import DateOfBirthInput from '../ui/DateOfBirthInput';
 import ConsentCheckbox from '../ui/ConsentCheckbox';
 import {
@@ -86,13 +77,21 @@ export default function SignUp() {
 
     setLoading(true);
 
-const { data, error: signUpError } = await supabase.auth.signUp({
-  email: email.trim(),
-  password,
-  options: {
-    emailRedirectTo: 'addate://auth/callback',
-  },
-});
+    // Адрес подтверждения зависит от платформы: на нативе это схема
+    // addate://, которую открывает установленное приложение, на вебе —
+    // https://addate.ru/web/auth/callback. Со схемой письмо ушло бы в
+    // никуда, и подтвердить адрес в браузере было бы нечем.
+    //
+    // Адрес из emailRedirectUrl() нужно один раз внести в раздел
+    // Authentication → URL Configuration → Redirect URLs в панели
+    // Supabase, иначе Supabase не примет его и вернёт на сайт по умолчанию.
+    const { data, error: signUpError } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+      options: {
+        emailRedirectTo: emailRedirectUrl(),
+      },
+    });
 
     if (signUpError) {
       setError(mapAuthError(signUpError.message));
@@ -104,7 +103,7 @@ const { data, error: signUpError } = await supabase.auth.signUp({
     // Supabase создаст пользователя, но авторизует только после клика по ссылке в письме.
     if (!data.session) {
       setLoading(false);
-      Alert.alert(
+      appAlert.alert(
         'Проверьте почту',
         'Мы отправили письмо для подтверждения регистрации. После подтверждения войдите через экран входа.'
       );

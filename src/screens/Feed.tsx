@@ -2,16 +2,8 @@
 import React, { useEffect, useLayoutEffect, useState, useCallback } from 'react';
 import type { RootNavigation } from '../lib/navigation';
 import { log } from '../lib/log';
-import {
-  View,
-  Text,
-  Image,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-} from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
+import { appAlert } from '../lib/alert';
 import { useNavigation } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -196,7 +188,7 @@ export default function Feed() {
 
     if (result.matched) {
       const age = calcAge(target.birth_date);
-      Alert.alert('Это совпадение! 🎉', `Вы с ${target.display_name || 'этим человеком'} понравились друг другу.`, [
+      appAlert.alert('Это совпадение! 🎉', `Вы с ${target.display_name || 'этим человеком'} понравились друг другу.`, [
         {
           text: 'Написать сообщение',
           onPress: () =>
@@ -232,14 +224,14 @@ export default function Feed() {
     setLastSkipped(null);
 
     if (error) {
-      Alert.alert('Ошибка', 'Не удалось вернуть анкету: ' + error.message);
+      appAlert.alert('Ошибка', 'Не удалось вернуть анкету: ' + error.message);
       return;
     }
 
     if (!removed || removed.length === 0) {
       // Пара перекрыта лайком — вернуть в ленту можно, но пользователь
       // должен знать, что лайк уже учтён и совпадение может произойти сразу.
-      Alert.alert('Обратите внимание', 'Этот человек успел поставить вам лайк, пока вы его пропускали. Анкета возвращена в ленту — лайкните, чтобы создать совпадение.');
+      appAlert.alert('Обратите внимание', 'Этот человек успел поставить вам лайк, пока вы его пропускали. Анкета возвращена в ленту — лайкните, чтобы создать совпадение.');
     }
   }
 

@@ -2,6 +2,18 @@ ADdate — пространство для знакомств и общения 
 
 ## Сборка
 
+### Веб-версия (addate.ru/web)
+
+```
+npm install
+npm run build:web
+npm run serve:web
+```
+
+Подробности о выкладке на Cloudflare и о том, что на вебе работает, а что нет, — в [WEB_DEPLOY.md](WEB_DEPLOY.md).
+
+### Android APK
+
 Сборка APK локально, без облака EAS:
 
 ```
@@ -10,4 +22,10 @@ npm run build:apk
 npm run verify:apk
 ```
 
-Подробности, ключи запуска и ограничения — в [BUILDING.md](BUILDING.md).
+## Проверки
+
+```
+npm run test:date   # расчёт возраста и разбор даты рождения
+npm run build:web   # собирает веб-версию и проверяет результат
+npm run verify:apk  # проверяет содержимое собранного APK
+```

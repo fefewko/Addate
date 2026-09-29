@@ -1,0 +1,19 @@
+# Cloudflare Pages / Workers — заголовки для веб-версии ADDate
+#
+# Копируется в корень сборки вместе с _redirects. Нужен, чтобы статика не
+# застревала в кэше после выкладки: бандл содержит хеш в имени, но index.html
+# — нет, и без этих заголовков браузер продолжал бы открывать старую сборку
+# после обновления.
+/web/*
+  Cache-Control: no-cache, must-revalidate
+
+/web/_expo/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/web/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
