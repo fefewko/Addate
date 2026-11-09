@@ -11,6 +11,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '../lib/supabase';
 import { uploadChatImage, getSignedChatImageUrls } from '../lib/chatImages';
 import { colors } from '../lib/theme';
+import { decryptText, encryptText, getLocalPrivateKey, getPublicKey, publicKeyToBase64 } from '../lib/e2ee';
 
 type Message = {
   id: string;
@@ -85,7 +86,25 @@ export default function Chat() {
       return;
     }
 
-    const loaded = data || [];
+    const loaded = await Promise.all(
+      (data || []).map(async (m) => {
+        if (!m.content) {
+          return m;
+        }
+        const privateKey = user.id ? await getLocalPrivateKey(user.id) : null;
+        const peerPublicKey = otherUserId ? await getPublicKey(otherUserId) : null;
+        if (!privateKey || !peerPublicKey) {
+          return m;
+        }
+        try {
+          const text = await decryptText(privateKey, publicKeyToBase64(peerPublicKey), m.content);
+          return { ...m, content: text };
+        } catch (e) {
+          log.warn('E2EE: не удалось расшифровать сообщение:', e);
+          return m;
+        }
+      })
+    );
     setMessages(loaded);
 
     const paths = loaded.map((m) => m.image_path).filter((p): p is string => !!p);
@@ -116,9 +135,22 @@ export default function Chat() {
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `match_id=eq.${matchId}` },
         async (payload) => {
           const newMessage = payload.new as Message;
-          setMessages((prev) => [...prev, newMessage]);
-          if (newMessage.image_path) {
-            const urls = await getSignedChatImageUrls([newMessage.image_path]);
+          let message = newMessage;
+          if (newMessage.content) {
+            const privateKey = myId ? await getLocalPrivateKey(myId) : null;
+            const peerPublicKey = otherUserId ? await getPublicKey(otherUserId) : null;
+            if (privateKey && peerPublicKey) {
+              try {
+                const text = await decryptText(privateKey, publicKeyToBase64(peerPublicKey), newMessage.content);
+                message = { ...newMessage, content: text };
+              } catch (e) {
+                log.warn('E2EE: не удалось расшифровать realtime-сообщение:', e);
+              }
+            }
+          }
+          setMessages((prev) => [...prev, message]);
+          if (message.image_path) {
+            const urls = await getSignedChatImageUrls([message.image_path]);
             setImageUrls((prev) => ({ ...prev, ...urls }));
           }
         }
@@ -147,10 +179,19 @@ export default function Chat() {
     const content = text.trim();
     setText('');
 
+    const privateKey = myId ? await getLocalPrivateKey(myId) : null;
+    const peerPublicKey = otherUserId ? await getPublicKey(otherUserId) : null;
+    if (!privateKey || !peerPublicKey) {
+      setText(content); // возвращаем текст в поле, чтобы не потерять
+      setSending(false);
+      appAlert.alert('Ошибка', 'Не удалось отправить: сессия шифрования не готова.');
+      return;
+    }
+    const payload = await encryptText(privateKey, publicKeyToBase64(peerPublicKey), content);
     const { error } = await supabase.from('messages').insert({
       match_id: matchId,
       sender_id: myId,
-      content,
+      content: JSON.stringify(payload),
     });
 
     setSending(false);

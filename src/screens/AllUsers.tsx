@@ -12,6 +12,7 @@ import { uploadChatImage, getSignedChatImageUrls } from '../lib/chatImages';
 import { likeProfile } from '../lib/matches';
 import { supabase } from '../lib/supabase';
 import { getMyCoordinates } from '../lib/location';
+import { decryptText, encryptText, getLocalPrivateKey, getPublicKey, publicKeyToBase64 } from '../lib/e2ee';
 import LoadError from '../ui/LoadError';
 import { SOBRIETY_LABEL, SOBRIETY_OPTIONS, SUBSTANCE_OPTIONS, SobrietyStatus, calcAge, isOnline, formatDistance } from '../lib/profileDisplay';
 import { colors } from '../lib/theme';
@@ -242,7 +243,21 @@ function QuickChatModal({
         .eq('match_id', matchId)
         .order('created_at', { ascending: true });
 
-      const loaded = data || [];
+      const loaded = await Promise.all(
+        (data || []).map(async (m) => {
+          if (!m.content) return m;
+          const privateKey = myId ? await getLocalPrivateKey(myId) : null;
+          const peerPublicKey = m.sender_id ? await getPublicKey(m.sender_id) : null;
+          if (!privateKey || !peerPublicKey) return m;
+          try {
+            const text = await decryptText(privateKey, publicKeyToBase64(peerPublicKey), m.content);
+            return { ...m, content: text };
+          } catch (e) {
+            log.warn('E2EE: не удалось расшифровать сообщение:', e);
+            return m;
+          }
+        })
+      );
       if (active) {
         setMessages(loaded);
         setLoading(false);
@@ -270,9 +285,22 @@ function QuickChatModal({
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `match_id=eq.${matchId}` },
         async (payload) => {
           const newMessage = payload.new as Message;
-          setMessages((prev) => [...prev, newMessage]);
-          if (newMessage.image_path) {
-            const urls = await getSignedChatImageUrls([newMessage.image_path]);
+          let message = newMessage;
+          if (newMessage.content) {
+            const privateKey = myId ? await getLocalPrivateKey(myId) : null;
+            const peerPublicKey = newMessage.sender_id ? await getPublicKey(newMessage.sender_id) : null;
+            if (privateKey && peerPublicKey) {
+              try {
+                const text = await decryptText(privateKey, publicKeyToBase64(peerPublicKey), newMessage.content);
+                message = { ...newMessage, content: text };
+              } catch (e) {
+                log.warn('E2EE: не удалось расшифровать realtime-сообщение:', e);
+              }
+            }
+          }
+          setMessages((prev) => [...prev, message]);
+          if (message.image_path) {
+            const urls = await getSignedChatImageUrls([message.image_path]);
             setImageUrls((prev) => ({ ...prev, ...urls }));
           }
         }
@@ -301,7 +329,22 @@ function QuickChatModal({
     const content = text.trim();
     setText('');
 
-    const { error } = await supabase.from('messages').insert({ match_id: matchId, sender_id: myId, content });
+    const privateKey = myId ? await getLocalPrivateKey(myId) : null;
+    const { data: matchData } = await supabase
+      .from('matches')
+      .select('user_a, user_b')
+      .eq('id', matchId)
+      .maybeSingle();
+    const recipientId = matchData ? (matchData.user_a === myId ? matchData.user_b : matchData.user_a) : null;
+    const recipientPublicKey = recipientId ? await getPublicKey(recipientId) : null;
+    if (!privateKey || !recipientPublicKey) {
+      setText(content);
+      setSending(false);
+      appAlert.alert('Ошибка', 'Не удалось отправить: сессия шифрования не готова.');
+      return;
+    }
+    const payload = await encryptText(privateKey, publicKeyToBase64(recipientPublicKey), content);
+    const { error } = await supabase.from('messages').insert({ match_id: matchId, sender_id: myId, content: JSON.stringify(payload) });
     setSending(false);
     if (error) {
       appAlert.alert('Ошибка', 'Не удалось отправить сообщение.');
