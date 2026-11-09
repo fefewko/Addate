@@ -96,6 +96,22 @@ export async function getOrCreateIdentity(
   return { publicKey, privateKey };
 }
 
+// Гарантирует наличие локального приватного ключа. Вызывается перед отправкой
+// сообщения: если при старте приложения ключ создать не удалось (например, не
+// было сети или ещё не применили миграцию), пробуем ещё раз здесь.
+export async function ensurePrivateKey(userId: string): Promise<Uint8Array | null> {
+  const existing = await getLocalPrivateKey(userId);
+  if (existing) {
+    return existing;
+  }
+  try {
+    const identity = await getOrCreateIdentity(userId);
+    return identity?.privateKey ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getPublicKey(userId: string): Promise<Uint8Array | null> {
   const { data, error } = await supabase
     .from('profiles')

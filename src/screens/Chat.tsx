@@ -11,7 +11,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '../lib/supabase';
 import { decryptChatImage, getSignedChatImageUrls, uploadEncryptedChatImage, writeDecryptedImage } from '../lib/chatImages';
 import { colors } from '../lib/theme';
-import { decryptText, encryptText, getLocalPrivateKey, getPublicKey, publicKeyToBase64 } from '../lib/e2ee';
+import { decryptText, encryptText, ensurePrivateKey, getLocalPrivateKey, getPublicKey, publicKeyToBase64 } from '../lib/e2ee';
 
 type Message = {
   id: string;
@@ -42,6 +42,7 @@ export default function Chat() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [text, setText] = useState('');
   const [myId, setMyId] = useState<string | null>(null);
+  const [peerId, setPeerId] = useState<string | null>(otherUserId ?? null);
   const [isSupport, setIsSupport] = useState(false);
   const [sending, setSending] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -69,6 +70,38 @@ export default function Chat() {
       .then(({ data }) => setIsSupport(!!data?.is_admin));
   }, [otherUserId]);
 
+  // При входе по ссылке chat/:matchId в параметрах есть только matchId, без
+  // otherUserId. Раньше в этом случае собеседник оставался неизвестным, и
+  // отправка сообщений всегда падала с «сессия шифрования не готова»: не у
+  // кого было запросить публичный ключ. Достаём второго участника из matches.
+  useEffect(() => {
+    if (otherUserId) {
+      setPeerId(otherUserId);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
+
+      const { data } = await supabase
+        .from('matches')
+        .select('user_a, user_b')
+        .eq('id', matchId)
+        .maybeSingle();
+      if (cancelled || !data) return;
+
+      setPeerId(data.user_a === user.id ? data.user_b : data.user_a);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [otherUserId, matchId]);
+
   const loadMessages = useCallback(async () => {
     const {
       data: { user },
@@ -90,7 +123,7 @@ export default function Chat() {
     const loaded = await Promise.all(
       (data || []).map(async (m) => {
         const privateKey = user.id ? await getLocalPrivateKey(user.id) : null;
-        const peerPublicKey = otherUserId ? await getPublicKey(otherUserId) : null;
+        const peerPublicKey = peerId ? await getPublicKey(peerId) : null;
 
         // Изображение: content — зашифрованный JSON envelope, image_path —
         // ciphertext в storage. Расшифровываем байты и кешируем displayable URI.
@@ -138,7 +171,7 @@ export default function Chat() {
       .eq('match_id', matchId)
       .neq('sender_id', user.id)
       .is('read_at', null);
-  }, [matchId]);
+  }, [matchId, peerId]);
 
   useEffect(() => {
     loadMessages();
@@ -156,7 +189,7 @@ export default function Chat() {
           let message = newMessage;
           if (message.image_path) {
             const privateKey = myId ? await getLocalPrivateKey(myId) : null;
-            const peerPublicKey = otherUserId ? await getPublicKey(otherUserId) : null;
+            const peerPublicKey = peerId ? await getPublicKey(peerId) : null;
             if (privateKey && peerPublicKey) {
               try {
                 const result = await decryptChatImage(privateKey, await publicKeyToBase64(peerPublicKey), newMessage.content);
@@ -173,7 +206,7 @@ export default function Chat() {
           }
           if (newMessage.content) {
             const privateKey = myId ? await getLocalPrivateKey(myId) : null;
-            const peerPublicKey = otherUserId ? await getPublicKey(otherUserId) : null;
+            const peerPublicKey = peerId ? await getPublicKey(peerId) : null;
             if (privateKey && peerPublicKey) {
               try {
                 const text = await decryptText(privateKey, await publicKeyToBase64(peerPublicKey), newMessage.content);
@@ -191,7 +224,7 @@ export default function Chat() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [matchId]);
+  }, [matchId, myId, peerId]);
 
   // Подписанные ссылки живут час. Если чат открыт дольше, картинки в старых
   // сообщениях перестают грузиться, поэтому по onError запрашиваем ссылку
@@ -210,12 +243,34 @@ export default function Chat() {
     const content = text.trim();
     setText('');
 
-    const privateKey = myId ? await getLocalPrivateKey(myId) : null;
-    const peerPublicKey = otherUserId ? await getPublicKey(otherUserId) : null;
-    if (!privateKey || !peerPublicKey) {
-      setText(content); // возвращаем текст в поле, чтобы не потерять
+    const privateKey = myId ? await ensurePrivateKey(myId) : null;
+    let peerPublicKey: Uint8Array | null = null;
+    let peerKeyError: unknown = null;
+    try {
+      peerPublicKey = peerId ? await getPublicKey(peerId) : null;
+    } catch (e) {
+      peerKeyError = e;
+    }
+
+    if (peerKeyError || !privateKey) {
+      setText(content);
       setSending(false);
-      appAlert.alert('Ошибка', 'Не удалось отправить: сессия шифрования не готова.');
+      log.warn('E2EE: не удалось подготовить сессию шифрования:', peerKeyError);
+      appAlert.alert(
+        'Ошибка',
+        peerKeyError
+          ? 'Сервер не готов к шифрованной переписке: похоже, не применена миграция E2EE.'
+          : 'Не удалось создать ключ шифрования на этом устройстве. Попробуйте выйти из аккаунта и войти снова.'
+      );
+      return;
+    }
+    if (!peerPublicKey) {
+      setText(content);
+      setSending(false);
+      appAlert.alert(
+        'Собеседник ещё не готов',
+        'У собеседника пока нет ключа шифрования. Ему нужно открыть приложение версии 0.0.18 или новее.'
+      );
       return;
     }
     const payload = await encryptText(privateKey, await publicKeyToBase64(peerPublicKey), content);
@@ -251,10 +306,21 @@ export default function Chat() {
 
     setUploadingImage(true);
     try {
-      const privateKey = myId ? await getLocalPrivateKey(myId) : null;
-      const peerPublicKey = otherUserId ? await getPublicKey(otherUserId) : null;
-      if (!privateKey || !peerPublicKey) {
-        throw new Error('Сессия шифрования не готова.');
+      const privateKey = myId ? await ensurePrivateKey(myId) : null;
+      if (!privateKey) {
+        throw new Error('не удалось создать ключ шифрования на этом устройстве.');
+      }
+      let peerPublicKey: Uint8Array | null = null;
+      try {
+        peerPublicKey = peerId ? await getPublicKey(peerId) : null;
+      } catch (e) {
+        log.warn('E2EE: не удалось получить публичный ключ собеседника:', e);
+        throw new Error('сервер не готов к шифрованной переписке (не применена миграция E2EE).');
+      }
+      if (!peerPublicKey) {
+        throw new Error(
+          'у собеседника пока нет ключа шифрования — ему нужно открыть приложение версии 0.0.18 или новее.'
+        );
       }
       const { path, payload, bytes, format } = await uploadEncryptedChatImage(
         matchId,
