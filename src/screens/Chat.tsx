@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '../lib/supabase';
-import { uploadChatImage, getSignedChatImageUrls } from '../lib/chatImages';
+import { decryptChatImage, getSignedChatImageUrls, uploadEncryptedChatImage, writeDecryptedImage } from '../lib/chatImages';
 import { colors } from '../lib/theme';
 import { decryptText, encryptText, getLocalPrivateKey, getPublicKey, publicKeyToBase64 } from '../lib/e2ee';
 
@@ -38,6 +38,7 @@ export default function Chat() {
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
+  const [decryptedImages, setDecryptedImages] = useState<Record<string, string>>({});
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [text, setText] = useState('');
   const [myId, setMyId] = useState<string | null>(null);
@@ -88,11 +89,28 @@ export default function Chat() {
 
     const loaded = await Promise.all(
       (data || []).map(async (m) => {
+        const privateKey = user.id ? await getLocalPrivateKey(user.id) : null;
+        const peerPublicKey = otherUserId ? await getPublicKey(otherUserId) : null;
+
+        // Изображение: content — зашифрованный JSON envelope, image_path —
+        // ciphertext в storage. Расшифровываем байты и кешируем displayable URI.
+        if (m.image_path) {
+          const path = m.image_path;
+          if (!privateKey || !peerPublicKey || !path) {
+            return m;
+          }
+          const result = await decryptChatImage(privateKey, publicKeyToBase64(peerPublicKey), m.content);
+          if (!result) {
+            return m;
+          }
+          const uri = await writeDecryptedImage(result.bytes, result.format.mimeType, path);
+          setDecryptedImages((prev) => ({ ...prev, [path]: uri }));
+          return m;
+        }
+
         if (!m.content) {
           return m;
         }
-        const privateKey = user.id ? await getLocalPrivateKey(user.id) : null;
-        const peerPublicKey = otherUserId ? await getPublicKey(otherUserId) : null;
         if (!privateKey || !peerPublicKey) {
           return m;
         }
@@ -136,6 +154,23 @@ export default function Chat() {
         async (payload) => {
           const newMessage = payload.new as Message;
           let message = newMessage;
+          if (message.image_path) {
+            const privateKey = myId ? await getLocalPrivateKey(myId) : null;
+            const peerPublicKey = otherUserId ? await getPublicKey(otherUserId) : null;
+            if (privateKey && peerPublicKey) {
+              try {
+                const result = await decryptChatImage(privateKey, publicKeyToBase64(peerPublicKey), newMessage.content);
+                if (result && message.image_path) {
+                  const uri = await writeDecryptedImage(result.bytes, result.format.mimeType, message.image_path);
+                  setDecryptedImages((prev) => ({ ...prev, [message.image_path as string]: uri }));
+                }
+              } catch (e) {
+                log.warn('E2EE: не удалось расшифровать realtime-изображение:', e);
+              }
+            }
+            setMessages((prev) => [...prev, message]);
+            return;
+          }
           if (newMessage.content) {
             const privateKey = myId ? await getLocalPrivateKey(myId) : null;
             const peerPublicKey = otherUserId ? await getPublicKey(otherUserId) : null;
@@ -149,10 +184,6 @@ export default function Chat() {
             }
           }
           setMessages((prev) => [...prev, message]);
-          if (message.image_path) {
-            const urls = await getSignedChatImageUrls([message.image_path]);
-            setImageUrls((prev) => ({ ...prev, ...urls }));
-          }
         }
       )
       .subscribe();
@@ -220,13 +251,26 @@ export default function Chat() {
 
     setUploadingImage(true);
     try {
-      const path = await uploadChatImage(matchId, result.assets[0].uri);
+      const privateKey = myId ? await getLocalPrivateKey(myId) : null;
+      const peerPublicKey = otherUserId ? await getPublicKey(otherUserId) : null;
+      if (!privateKey || !peerPublicKey) {
+        throw new Error('Сессия шифрования не готова.');
+      }
+      const { path, payload, bytes, format } = await uploadEncryptedChatImage(
+        matchId,
+        result.assets[0].uri,
+        privateKey,
+        publicKeyToBase64(peerPublicKey)
+      );
       const { error } = await supabase.from('messages').insert({
         match_id: matchId,
         sender_id: myId,
         image_path: path,
+        content: JSON.stringify(payload),
       });
       if (error) throw new Error(error.message);
+      const uri = await writeDecryptedImage(bytes, format.mimeType, path);
+      setDecryptedImages((prev) => ({ ...prev, [path]: uri }));
     } catch (e: any) {
       appAlert.alert('Ошибка', 'Не удалось отправить фото: ' + e.message);
     }
@@ -336,7 +380,7 @@ export default function Chat() {
           const isMine = item.sender_id === myId;
 
           if (item.image_path) {
-            const url = imageUrls[item.image_path];
+            const url = item.image_path ? decryptedImages[item.image_path] ?? imageUrls[item.image_path] : null;
             return (
               <View style={[styles.bubble, styles.imageBubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}>
                 {url ? (

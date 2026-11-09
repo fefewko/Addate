@@ -11,8 +11,9 @@
 //   - В БД (messages.content) сохраняется только ciphertext (JSON: {v, nonce, ct}).
 //   - Сервер видит только ciphertext; доступ к plaintext — только у участников.
 //
-// Используем libsodium-wrappers — чистая JS-реализация libsodium (X25519 + XSalsa20-Poly1305).
-// Работает на web и нативном React Native без нативной сборки JSI/C++ (устойчиво к новому стэку RN).
+// Используем libsodium-wrappers — чистая JS-реализация libsodium (X25519 +
+// XSalsa20-Poly1305). Работает на web и нативном React Native без нативной
+// сборки JSI/C++ (устойчиво к новому стэку RN 0.86 / Expo 57).
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
@@ -23,6 +24,7 @@ import {
   randombytes_buf,
   to_base64,
   from_base64,
+  ready,
 } from 'libsodium-wrappers';
 
 export type E2EEPayload = {
@@ -31,10 +33,10 @@ export type E2EEPayload = {
   ct: string;
 };
 
-const privateKeyStorageKey = (userId: string) => `e2ee:privateKey:${userId}`;
+const privateKeyKey = (userId: string) => `e2ee:privateKey:${userId}`;
 
 export async function getLocalPrivateKey(userId: string): Promise<Uint8Array | null> {
-  const stored = await AsyncStorage.getItem(privateKeyStorageKey(userId));
+  const stored = await AsyncStorage.getItem(privateKeyKey(userId));
   if (!stored) {
     return null;
   }
@@ -42,7 +44,8 @@ export async function getLocalPrivateKey(userId: string): Promise<Uint8Array | n
 }
 
 export async function getOrCreateIdentity(userId: string): Promise<{ publicKey: Uint8Array; privateKey: Uint8Array }> {
-  const stored = await AsyncStorage.getItem(privateKeyStorageKey(userId));
+  await ready;
+  const stored = await AsyncStorage.getItem(privateKeyKey(userId));
   if (stored) {
     const privateKey = from_base64(stored) as Uint8Array;
     const publicKey = await getPublicKey(userId);
@@ -54,7 +57,7 @@ export async function getOrCreateIdentity(userId: string): Promise<{ publicKey: 
   const keypair = crypto_box_keypair();
   const privateKey = keypair.privateKey as Uint8Array;
   const publicKey = keypair.publicKey as Uint8Array;
-  await AsyncStorage.setItem(privateKeyStorageKey(userId), to_base64(privateKey) as string);
+  await AsyncStorage.setItem(privateKeyKey(userId), to_base64(privateKey) as string);
   await savePublicKey(userId, to_base64(publicKey) as string);
   return { publicKey, privateKey };
 }
@@ -92,6 +95,7 @@ export async function encryptText(
   peerPublicKeyB64: string,
   plaintext: string
 ): Promise<E2EEPayload> {
+  await ready;
   const peerPublicKey = from_base64(peerPublicKeyB64) as Uint8Array;
   const nonce = randombytes_buf(24);
   const ciphertext = crypto_box_easy(plaintext, nonce, peerPublicKey, privateKey);
@@ -108,9 +112,38 @@ export async function decryptText(
   peerPublicKeyB64: string,
   payload: string
 ): Promise<string> {
+  await ready;
   const parsed = JSON.parse(payload) as E2EEPayload;
   const nonce = from_base64(parsed.nonce) as Uint8Array;
   const ciphertext = from_base64(parsed.ct) as Uint8Array;
   const plaintext = crypto_box_open_easy(ciphertext, nonce, from_base64(peerPublicKeyB64) as Uint8Array, privateKey);
   return new TextDecoder().decode(plaintext);
+}
+
+// Шифрует байты (например, изображение) тем же крипто-блоком, что и текст:
+// crypto_box (ECDH + SecretBox). Независимо от типа контента — общий формат
+// {v, nonce, ct} и общий путь encrypt → store → decrypt.
+export async function encryptBytes(
+  privateKey: Uint8Array,
+  peerPublicKeyB64: string,
+  bytes: Uint8Array
+): Promise<E2EEPayload> {
+  await ready;
+  const peerPublicKey = from_base64(peerPublicKeyB64) as Uint8Array;
+  const nonce = randombytes_buf(24);
+  const ciphertext = crypto_box_easy(bytes, nonce, peerPublicKey, privateKey);
+  return {
+    v: 1,
+    nonce: to_base64(nonce) as string,
+    ct: to_base64(ciphertext) as string,
+  };
+}
+
+// Дешифровывает payload (байты или текст) для получателя (peerPublicKeyB64) своим privateKey.
+export async function decryptBytes(privateKey: Uint8Array, peerPublicKeyB64: string, payload: E2EEPayload): Promise<Uint8Array> {
+  await ready;
+  const nonce = from_base64(payload.nonce) as Uint8Array;
+  const ciphertext = from_base64(payload.ct) as Uint8Array;
+  const plaintext = crypto_box_open_easy(ciphertext, nonce, from_base64(peerPublicKeyB64) as Uint8Array, privateKey);
+  return plaintext;
 }

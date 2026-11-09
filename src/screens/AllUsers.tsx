@@ -8,7 +8,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
-import { uploadChatImage, getSignedChatImageUrls } from '../lib/chatImages';
+import { decryptChatImage, getSignedChatImageUrls, uploadEncryptedChatImage, writeDecryptedImage } from '../lib/chatImages';
 import { likeProfile } from '../lib/matches';
 import { supabase } from '../lib/supabase';
 import { getMyCoordinates } from '../lib/location';
@@ -223,6 +223,7 @@ function QuickChatModal({
   const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<Message[]>([]);
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
+  const [decryptedImages, setDecryptedImages] = useState<Record<string, string>>({});
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -245,9 +246,20 @@ function QuickChatModal({
 
       const loaded = await Promise.all(
         (data || []).map(async (m) => {
-          if (!m.content) return m;
           const privateKey = myId ? await getLocalPrivateKey(myId) : null;
           const peerPublicKey = m.sender_id ? await getPublicKey(m.sender_id) : null;
+
+          if (m.image_path) {
+            const path = m.image_path;
+            if (!privateKey || !peerPublicKey || !path) return m;
+            const result = await decryptChatImage(privateKey, publicKeyToBase64(peerPublicKey), m.content);
+            if (!result) return m;
+            const uri = await writeDecryptedImage(result.bytes, result.format.mimeType, path);
+            setDecryptedImages((prev) => ({ ...prev, [path]: uri }));
+            return m;
+          }
+
+          if (!m.content) return m;
           if (!privateKey || !peerPublicKey) return m;
           try {
             const text = await decryptText(privateKey, publicKeyToBase64(peerPublicKey), m.content);
@@ -286,6 +298,23 @@ function QuickChatModal({
         async (payload) => {
           const newMessage = payload.new as Message;
           let message = newMessage;
+          if (message.image_path) {
+            const privateKey = myId ? await getLocalPrivateKey(myId) : null;
+            const peerPublicKey = newMessage.sender_id ? await getPublicKey(newMessage.sender_id) : null;
+            if (privateKey && peerPublicKey) {
+              try {
+                const result = await decryptChatImage(privateKey, publicKeyToBase64(peerPublicKey), newMessage.content);
+                if (result && message.image_path) {
+                  const uri = await writeDecryptedImage(result.bytes, result.format.mimeType, message.image_path);
+                  setDecryptedImages((prev) => ({ ...prev, [message.image_path as string]: uri }));
+                }
+              } catch (e) {
+                log.warn('E2EE: не удалось расшифровать realtime-изображение:', e);
+              }
+            }
+            setMessages((prev) => [...prev, message]);
+            return;
+          }
           if (newMessage.content) {
             const privateKey = myId ? await getLocalPrivateKey(myId) : null;
             const peerPublicKey = newMessage.sender_id ? await getPublicKey(newMessage.sender_id) : null;
@@ -299,10 +328,6 @@ function QuickChatModal({
             }
           }
           setMessages((prev) => [...prev, message]);
-          if (message.image_path) {
-            const urls = await getSignedChatImageUrls([message.image_path]);
-            setImageUrls((prev) => ({ ...prev, ...urls }));
-          }
         }
       )
       .subscribe();
@@ -370,9 +395,32 @@ function QuickChatModal({
 
     setUploadingImage(true);
     try {
-      const path = await uploadChatImage(matchId, result.assets[0].uri);
-      const { error } = await supabase.from('messages').insert({ match_id: matchId, sender_id: myId, image_path: path });
+      const privateKey = myId ? await getLocalPrivateKey(myId) : null;
+      const { data: matchData } = await supabase
+        .from('matches')
+        .select('user_a, user_b')
+        .eq('id', matchId)
+        .maybeSingle();
+      const recipientId = matchData ? (matchData.user_a === myId ? matchData.user_b : matchData.user_a) : null;
+      const recipientPublicKey = recipientId ? await getPublicKey(recipientId) : null;
+      if (!privateKey || !recipientPublicKey) {
+        throw new Error('Сессия шифрования не готова.');
+      }
+      const { path, payload, bytes, format } = await uploadEncryptedChatImage(
+        matchId,
+        result.assets[0].uri,
+        privateKey,
+        publicKeyToBase64(recipientPublicKey)
+      );
+      const { error } = await supabase.from('messages').insert({
+        match_id: matchId,
+        sender_id: myId,
+        image_path: path,
+        content: JSON.stringify(payload),
+      });
       if (error) throw new Error(error.message);
+      const uri = await writeDecryptedImage(bytes, format.mimeType, path);
+      setDecryptedImages((prev) => ({ ...prev, [path]: uri }));
     } catch (e: any) {
       appAlert.alert('Ошибка', 'Не удалось отправить фото: ' + e.message);
     }
@@ -407,7 +455,7 @@ function QuickChatModal({
               const isMine = item.sender_id === myId;
 
               if (item.image_path) {
-                const url = imageUrls[item.image_path];
+                const url = item.image_path ? decryptedImages[item.image_path] ?? imageUrls[item.image_path] : null;
                 return (
                   <View style={[styles.bubble, styles.imageBubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}>
                     {url ? (
