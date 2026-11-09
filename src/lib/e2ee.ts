@@ -11,21 +11,20 @@
 //   - В БД (messages.content) сохраняется только ciphertext (JSON: {v, nonce, ct}).
 //   - Сервер видит только ciphertext; доступ к plaintext — только у участников.
 //
-// Используем libsodium-wrappers — чистая JS-реализация libsodium (X25519 +
-// XSalsa20-Poly1305). Работает на web и нативном React Native без нативной
-// сборки JSI/C++ (устойчиво к новому стэку RN 0.86 / Expo 57).
+// Крипто-ядро — tweetnacl (чистый JS: X25519 + XSalsa20-Poly1305). Раньше здесь
+// был libsodium-wrappers, но его WASM/asm.js-сборка инициализировалась при
+// загрузке модуля и роняла приложение при холодном старте в Hermes. TweetNaCl
+// не использует WebAssembly и не выполняет тяжёлой работы при импорте.
+//
+// Формат ciphertext совместим с прежним (libsodium crypto_box_easy): MAC (16
+// байт) + ciphertext, nonce — 24 байта. Ключи и уже сохранённые сообщения
+// остаются читаемыми.
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import nacl from 'tweetnacl';
+import * as Crypto from 'expo-crypto';
 import { supabase } from './supabase';
-import {
-  crypto_box_easy,
-  crypto_box_open_easy,
-  crypto_box_keypair,
-  randombytes_buf,
-  to_base64,
-  from_base64,
-  ready,
-} from 'libsodium-wrappers';
+import { base64ToBytes, bytesToBase64, bytesToUtf8, utf8ToBytes } from './encoding';
 
 export type E2EEPayload = {
   v: 1;
@@ -35,30 +34,65 @@ export type E2EEPayload = {
 
 const privateKeyKey = (userId: string) => `e2ee:privateKey:${userId}`;
 
+// TweetNaCl берёт случайные байты из crypto.getRandomValues, которого в React
+// Native нет. Подставляем нативный генератор expo-crypto. Функция вызывается
+// лениво: PRNG нужен только в момент реальной крипто-операции.
+let prngConfigured = false;
+
+function getNacl(): typeof nacl {
+  if (!prngConfigured) {
+    nacl.setPRNG((target: Uint8Array, length: number) => {
+      // expo-crypto отдаёт не больше 1024 байт за вызов.
+      let offset = 0;
+      while (offset < length) {
+        const chunkSize = Math.min(1024, length - offset);
+        target.set(Crypto.getRandomBytes(chunkSize), offset);
+        offset += chunkSize;
+      }
+    });
+    prngConfigured = true;
+  }
+  return nacl;
+}
+
 export async function getLocalPrivateKey(userId: string): Promise<Uint8Array | null> {
   const stored = await AsyncStorage.getItem(privateKeyKey(userId));
   if (!stored) {
     return null;
   }
-  return from_base64(stored) as Uint8Array;
+  return base64ToBytes(stored);
 }
 
-export async function getOrCreateIdentity(userId: string): Promise<{ publicKey: Uint8Array; privateKey: Uint8Array }> {
-  await ready;
+// Возвращает keypair текущего пользователя, создавая его при первом входе.
+// null — если ключ уже создан на другом устройстве: перезаписывать публичный
+// ключ нельзя, иначе переписка на том устройстве станет нечитаемой.
+export async function getOrCreateIdentity(
+  userId: string
+): Promise<{ publicKey: Uint8Array; privateKey: Uint8Array } | null> {
+  const lib = getNacl();
   const stored = await AsyncStorage.getItem(privateKeyKey(userId));
+  const existingPublicKey = await getPublicKey(userId);
+
   if (stored) {
-    const privateKey = from_base64(stored) as Uint8Array;
-    const publicKey = await getPublicKey(userId);
-    if (publicKey) {
-      return { publicKey, privateKey };
+    const privateKey = base64ToBytes(stored);
+    if (existingPublicKey) {
+      return { publicKey: existingPublicKey, privateKey };
     }
+    // Публичный ключ потерян — восстанавливаем из приватного.
+    const publicKey = lib.box.keyPair.fromSecretKey(privateKey).publicKey;
+    await savePublicKey(userId, bytesToBase64(publicKey));
+    return { publicKey, privateKey };
   }
 
-  const keypair = crypto_box_keypair();
-  const privateKey = keypair.privateKey as Uint8Array;
-  const publicKey = keypair.publicKey as Uint8Array;
-  await AsyncStorage.setItem(privateKeyKey(userId), to_base64(privateKey) as string);
-  await savePublicKey(userId, to_base64(publicKey) as string);
+  if (existingPublicKey) {
+    return null;
+  }
+
+  const keypair = lib.box.keyPair();
+  const privateKey = keypair.secretKey;
+  const publicKey = keypair.publicKey;
+  await AsyncStorage.setItem(privateKeyKey(userId), bytesToBase64(privateKey));
+  await savePublicKey(userId, bytesToBase64(publicKey));
   return { publicKey, privateKey };
 }
 
@@ -74,7 +108,7 @@ export async function getPublicKey(userId: string): Promise<Uint8Array | null> {
   if (!data?.public_key) {
     return null;
   }
-  return from_base64(data.public_key) as Uint8Array;
+  return base64ToBytes(data.public_key);
 }
 
 export async function savePublicKey(userId: string, publicKeyB64: string): Promise<void> {
@@ -84,8 +118,8 @@ export async function savePublicKey(userId: string, publicKeyB64: string): Promi
   }
 }
 
-export function publicKeyToBase64(publicKey: Uint8Array): string {
-  return to_base64(publicKey) as string;
+export async function publicKeyToBase64(publicKey: Uint8Array): Promise<string> {
+  return bytesToBase64(publicKey);
 }
 
 // Шифрует plaintext для получателя (peerPublicKeyB64) своим privateKey.
@@ -95,14 +129,14 @@ export async function encryptText(
   peerPublicKeyB64: string,
   plaintext: string
 ): Promise<E2EEPayload> {
-  await ready;
-  const peerPublicKey = from_base64(peerPublicKeyB64) as Uint8Array;
-  const nonce = randombytes_buf(24);
-  const ciphertext = crypto_box_easy(plaintext, nonce, peerPublicKey, privateKey);
+  const lib = getNacl();
+  const peerPublicKey = base64ToBytes(peerPublicKeyB64);
+  const nonce = lib.randomBytes(24);
+  const ciphertext = lib.box(utf8ToBytes(plaintext), nonce, peerPublicKey, privateKey);
   return {
     v: 1,
-    nonce: to_base64(nonce) as string,
-    ct: to_base64(ciphertext) as string,
+    nonce: bytesToBase64(nonce),
+    ct: bytesToBase64(ciphertext),
   };
 }
 
@@ -112,12 +146,15 @@ export async function decryptText(
   peerPublicKeyB64: string,
   payload: string
 ): Promise<string> {
-  await ready;
+  const lib = getNacl();
   const parsed = JSON.parse(payload) as E2EEPayload;
-  const nonce = from_base64(parsed.nonce) as Uint8Array;
-  const ciphertext = from_base64(parsed.ct) as Uint8Array;
-  const plaintext = crypto_box_open_easy(ciphertext, nonce, from_base64(peerPublicKeyB64) as Uint8Array, privateKey);
-  return new TextDecoder().decode(plaintext);
+  const nonce = base64ToBytes(parsed.nonce);
+  const ciphertext = base64ToBytes(parsed.ct);
+  const plaintext = lib.box.open(ciphertext, nonce, base64ToBytes(peerPublicKeyB64), privateKey);
+  if (!plaintext) {
+    throw new Error('E2EE: не удалось расшифровать сообщение');
+  }
+  return bytesToUtf8(plaintext);
 }
 
 // Шифрует байты (например, изображение) тем же крипто-блоком, что и текст:
@@ -128,22 +165,25 @@ export async function encryptBytes(
   peerPublicKeyB64: string,
   bytes: Uint8Array
 ): Promise<E2EEPayload> {
-  await ready;
-  const peerPublicKey = from_base64(peerPublicKeyB64) as Uint8Array;
-  const nonce = randombytes_buf(24);
-  const ciphertext = crypto_box_easy(bytes, nonce, peerPublicKey, privateKey);
+  const lib = getNacl();
+  const peerPublicKey = base64ToBytes(peerPublicKeyB64);
+  const nonce = lib.randomBytes(24);
+  const ciphertext = lib.box(bytes, nonce, peerPublicKey, privateKey);
   return {
     v: 1,
-    nonce: to_base64(nonce) as string,
-    ct: to_base64(ciphertext) as string,
+    nonce: bytesToBase64(nonce),
+    ct: bytesToBase64(ciphertext),
   };
 }
 
 // Дешифровывает payload (байты или текст) для получателя (peerPublicKeyB64) своим privateKey.
 export async function decryptBytes(privateKey: Uint8Array, peerPublicKeyB64: string, payload: E2EEPayload): Promise<Uint8Array> {
-  await ready;
-  const nonce = from_base64(payload.nonce) as Uint8Array;
-  const ciphertext = from_base64(payload.ct) as Uint8Array;
-  const plaintext = crypto_box_open_easy(ciphertext, nonce, from_base64(peerPublicKeyB64) as Uint8Array, privateKey);
+  const lib = getNacl();
+  const nonce = base64ToBytes(payload.nonce);
+  const ciphertext = base64ToBytes(payload.ct);
+  const plaintext = lib.box.open(ciphertext, nonce, base64ToBytes(peerPublicKeyB64), privateKey);
+  if (!plaintext) {
+    throw new Error('E2EE: не удалось расшифровать данные');
+  }
   return plaintext;
 }

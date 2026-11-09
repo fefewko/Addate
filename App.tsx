@@ -14,6 +14,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Notifications from 'expo-notifications';
 
 import { supabase } from './src/lib/supabase';
+import { getOrCreateIdentity } from './src/lib/e2ee';
 import { registerForPushNotifications } from './src/lib/pushNotifications';
 import { isWeb, buildLinking, documentTitleFormatter } from './src/lib/webLinks';
 
@@ -167,10 +168,31 @@ function Tabs() {
     setUnreadCount(count || 0);
   }, []);
 
+  // E2EE: при первом входе создаём долгосрочный keypair и публикуем публичный
+  // ключ в профиле. Без этого отправка сообщений невозможна: чат требует
+  // готовую сессию шифрования. Ошибку не считаем фатальной — приложение должно
+  // работать и без E2EE (например, если миграция ещё не применена).
+  const ensureE2EEIdentity = useCallback(async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
+    try {
+      const identity = await getOrCreateIdentity(user.id);
+      if (!identity) {
+        log.warn('E2EE: ключ уже создан на другом устройстве, локальной сессии нет');
+      }
+    } catch (e) {
+      log.warn('E2EE: не удалось подготовить ключи:', e);
+    }
+  }, []);
+
   useEffect(() => {
     sendHeartbeat();
     refreshUnreadCount();
     registerForPushNotifications();
+    ensureE2EEIdentity();
 
     heartbeatTimer.current = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
 
@@ -212,7 +234,7 @@ function Tabs() {
       supabase.removeChannel(channel);
       notificationSub?.remove();
     };
-  }, [sendHeartbeat, refreshUnreadCount, navigation]);
+  }, [sendHeartbeat, refreshUnreadCount, ensureE2EEIdentity, navigation]);
 
   return (
     <Tab.Navigator

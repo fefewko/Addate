@@ -252,7 +252,7 @@ function QuickChatModal({
           if (m.image_path) {
             const path = m.image_path;
             if (!privateKey || !peerPublicKey || !path) return m;
-            const result = await decryptChatImage(privateKey, publicKeyToBase64(peerPublicKey), m.content);
+            const result = await decryptChatImage(privateKey, await publicKeyToBase64(peerPublicKey), m.content);
             if (!result) return m;
             const uri = await writeDecryptedImage(result.bytes, result.format.mimeType, path);
             setDecryptedImages((prev) => ({ ...prev, [path]: uri }));
@@ -262,7 +262,7 @@ function QuickChatModal({
           if (!m.content) return m;
           if (!privateKey || !peerPublicKey) return m;
           try {
-            const text = await decryptText(privateKey, publicKeyToBase64(peerPublicKey), m.content);
+            const text = await decryptText(privateKey, await publicKeyToBase64(peerPublicKey), m.content);
             return { ...m, content: text };
           } catch (e) {
             log.warn('E2EE: не удалось расшифровать сообщение:', e);
@@ -303,7 +303,7 @@ function QuickChatModal({
             const peerPublicKey = newMessage.sender_id ? await getPublicKey(newMessage.sender_id) : null;
             if (privateKey && peerPublicKey) {
               try {
-                const result = await decryptChatImage(privateKey, publicKeyToBase64(peerPublicKey), newMessage.content);
+                const result = await decryptChatImage(privateKey, await publicKeyToBase64(peerPublicKey), newMessage.content);
                 if (result && message.image_path) {
                   const uri = await writeDecryptedImage(result.bytes, result.format.mimeType, message.image_path);
                   setDecryptedImages((prev) => ({ ...prev, [message.image_path as string]: uri }));
@@ -320,7 +320,7 @@ function QuickChatModal({
             const peerPublicKey = newMessage.sender_id ? await getPublicKey(newMessage.sender_id) : null;
             if (privateKey && peerPublicKey) {
               try {
-                const text = await decryptText(privateKey, publicKeyToBase64(peerPublicKey), newMessage.content);
+                const text = await decryptText(privateKey, await publicKeyToBase64(peerPublicKey), newMessage.content);
                 message = { ...newMessage, content: text };
               } catch (e) {
                 log.warn('E2EE: не удалось расшифровать realtime-сообщение:', e);
@@ -368,7 +368,7 @@ function QuickChatModal({
       appAlert.alert('Ошибка', 'Не удалось отправить: сессия шифрования не готова.');
       return;
     }
-    const payload = await encryptText(privateKey, publicKeyToBase64(recipientPublicKey), content);
+    const payload = await encryptText(privateKey, await publicKeyToBase64(recipientPublicKey), content);
     const { error } = await supabase.from('messages').insert({ match_id: matchId, sender_id: myId, content: JSON.stringify(payload) });
     setSending(false);
     if (error) {
@@ -410,7 +410,7 @@ function QuickChatModal({
         matchId,
         result.assets[0].uri,
         privateKey,
-        publicKeyToBase64(recipientPublicKey)
+        await publicKeyToBase64(recipientPublicKey)
       );
       const { error } = await supabase.from('messages').insert({
         match_id: matchId,

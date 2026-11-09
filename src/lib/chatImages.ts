@@ -1,11 +1,12 @@
 // src/lib/chatImages.ts
 import { Platform } from 'react-native';
-import { documentDirectory } from 'expo-file-system/legacy';
-import { File } from 'expo-file-system';
 import { supabase } from './supabase';
 import { imageFormatForUpload, type ImageFormat } from './imageBytes';
 import { decryptBytes, encryptBytes, type E2EEPayload } from './e2ee';
-import { from_base64, to_base64 } from 'libsodium-wrappers';
+import { base64ToBytes, bytesToBase64 } from './encoding';
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+declare const require: (id: string) => any;
 
 const SIGNED_URL_TTL_SECONDS = 60 * 60; // час
 
@@ -51,9 +52,8 @@ export async function uploadEncryptedChatImage(
 
   const payload = await encryptBytes(privateKey, peerPublicKeyB64, bytes);
 
-  const ctBytes = from_base64(payload.ct) as Uint8Array;
-  const ctArrayBuffer = new ArrayBuffer(ctBytes.byteLength);
-  new Uint8Array(ctArrayBuffer).set(ctBytes);
+  const ctBytes = base64ToBytes(payload.ct);
+  const ctArrayBuffer = ctBytes.buffer.slice(ctBytes.byteOffset, ctBytes.byteOffset + ctBytes.byteLength) as ArrayBuffer;
 
   const path = `${matchId}/${Date.now()}.${format.ext}`;
   const { error } = await supabase.storage
@@ -96,15 +96,19 @@ export async function decryptChatImage(
 export async function writeDecryptedImage(bytes: Uint8Array, mimeType: string, id: string): Promise<string> {
   // На web используем data URI — там проще. На нативе пишем расшифрованные
   // байты во временный файл, чтобы RN Image мог отдать его нативному слою.
+  // expo-file-system подключается лениво: не хотим грузить его модуль на
+  // холодном старте приложения.
   if (Platform.OS === 'web') {
-    return bytesToDataUri(bytes, mimeType);
+    return `data:${mimeType};base64,${bytesToBase64(bytes)}`;
   }
+  const File: any = (require('expo-file-system') as { File: any }).File;
+  const documentDirectory: string = (require('expo-file-system/legacy') as { documentDirectory: string }).documentDirectory;
   const filename = id.split('/').pop() ?? 'image';
   const file = new File(`${documentDirectory}${filename}`);
   file.write(bytes);
   return file.uri;
 }
 
-export function bytesToDataUri(bytes: Uint8Array, mimeType: string): string {
-  return `data:${mimeType};base64,${to_base64(bytes)}`;
+export async function bytesToDataUri(bytes: Uint8Array, mimeType: string): Promise<string> {
+  return `data:${mimeType};base64,${bytesToBase64(bytes)}`;
 }
