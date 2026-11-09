@@ -68,6 +68,29 @@ function fail(message) {
   process.exit(1);
 }
 
+// Gradle берёт versionName/versionCode из android/app/build.gradle, а не из
+// app.json. Если android/ уже существует, prebuild не запускается, и APK
+// продолжает показывать старую версию (так 0.0.20 собрался как 0.0.16).
+// Синхронизируем номер вручную перед каждой сборкой.
+function syncAndroidVersion() {
+  const appJsonPath = path.join(ROOT, 'app.json');
+  const gradlePath = path.join(ANDROID_DIR, 'app', 'build.gradle');
+  if (!fs.existsSync(appJsonPath) || !fs.existsSync(gradlePath)) return;
+
+  const version = JSON.parse(fs.readFileSync(appJsonPath, 'utf8')).expo?.version;
+  if (!version) return;
+
+  const parts = version.split('.').map((p) => parseInt(p, 10) || 0);
+  const versionCode = parts[0] * 10000 + parts[1] * 100 + parts[2];
+
+  let gradle = fs.readFileSync(gradlePath, 'utf8');
+  gradle = gradle
+    .replace(/versionCode\s+\d+/, `versionCode ${versionCode}`)
+    .replace(/versionName\s+"[^"]*"/, `versionName "${version}"`);
+  fs.writeFileSync(gradlePath, gradle);
+  console.log(`  Версия:   ${version} (versionCode ${versionCode})`);
+}
+
 function main() {
   const archArg = flagValue('arch', PHONE_ABIS);
   const heap = flagValue('heap', '4g');
@@ -114,6 +137,8 @@ function main() {
     console.log('\nНативный проект на месте, prebuild пропускаю.');
     console.log('Если менялись нативные зависимости — запустите с --rebuild.');
   }
+
+  syncAndroidVersion();
 
   const gradlew = isWindows
     ? path.join(ANDROID_DIR, 'gradlew.bat')
