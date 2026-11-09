@@ -181,7 +181,7 @@ function Tabs() {
     try {
       const identity = await getOrCreateIdentity(user.id);
       if (!identity) {
-        log.warn('E2EE: ключ уже создан на другом устройстве, локальной сессии нет');
+        log.warn('E2EE: в профиле уже есть ключ другого устройства, локальная пара не создана');
       }
     } catch (e) {
       log.warn('E2EE: не удалось подготовить ключи:', e);
@@ -200,6 +200,9 @@ function Tabs() {
       if (state === 'active') {
         sendHeartbeat();
         refreshUnreadCount();
+        // Повторная публикация ключа: при регистрации профиль мог быть
+        // создан уже после первого запуска, и тогда UPDATE не нашёл строку.
+        ensureE2EEIdentity();
       }
     });
 

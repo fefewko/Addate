@@ -12,7 +12,7 @@ import { decryptChatImage, getSignedChatImageUrls, uploadEncryptedChatImage, wri
 import { likeProfile } from '../lib/matches';
 import { supabase } from '../lib/supabase';
 import { getMyCoordinates } from '../lib/location';
-import { decryptText, encryptText, ensurePrivateKey, getLocalPrivateKey, getPublicKey, publicKeyToBase64 } from '../lib/e2ee';
+import { decryptText, encryptText, getLocalPrivateKey, getPublicKey, prepareSendSession, publicKeyToBase64 } from '../lib/e2ee';
 import LoadError from '../ui/LoadError';
 import { SOBRIETY_LABEL, SOBRIETY_OPTIONS, SUBSTANCE_OPTIONS, SobrietyStatus, calcAge, isOnline, formatDistance } from '../lib/profileDisplay';
 import { colors } from '../lib/theme';
@@ -244,25 +244,49 @@ function QuickChatModal({
         .eq('match_id', matchId)
         .order('created_at', { ascending: true });
 
+      const privateKey = myId ? await getLocalPrivateKey(myId) : null;
+
+      // В переписке сообщения приходят от двух участников, поэтому ключ нужен
+      // для каждого автора. Ошибку чтения одного ключа не превращаем в отказ
+      // загрузки всего диалога.
+      const peerKeys = new Map<string, string>();
+      await Promise.all(
+        Array.from(new Set((data || []).map((m) => m.sender_id).filter((id): id is string => !!id))).map(
+          async (senderId) => {
+            try {
+              const key = await getPublicKey(senderId);
+              if (key) {
+                peerKeys.set(senderId, await publicKeyToBase64(key));
+              }
+            } catch (e) {
+              log.warn('E2EE: не удалось прочитать публичный ключ участника:', e);
+            }
+          }
+        )
+      );
+
       const loaded = await Promise.all(
         (data || []).map(async (m) => {
-          const privateKey = myId ? await getLocalPrivateKey(myId) : null;
-          const peerPublicKey = m.sender_id ? await getPublicKey(m.sender_id) : null;
+          const peerPublicKeyB64 = m.sender_id ? peerKeys.get(m.sender_id) ?? null : null;
 
           if (m.image_path) {
             const path = m.image_path;
-            if (!privateKey || !peerPublicKey || !path) return m;
-            const result = await decryptChatImage(privateKey, await publicKeyToBase64(peerPublicKey), m.content);
-            if (!result) return m;
-            const uri = await writeDecryptedImage(result.bytes, result.format.mimeType, path);
-            setDecryptedImages((prev) => ({ ...prev, [path]: uri }));
+            if (!privateKey || !peerPublicKeyB64 || !path) return m;
+            try {
+              const result = await decryptChatImage(privateKey, peerPublicKeyB64, m.content);
+              if (!result) return m;
+              const uri = await writeDecryptedImage(result.bytes, result.format.mimeType, path);
+              setDecryptedImages((prev) => ({ ...prev, [path]: uri }));
+            } catch (e) {
+              log.warn('E2EE: не удалось расшифровать изображение:', e);
+            }
             return m;
           }
 
           if (!m.content) return m;
-          if (!privateKey || !peerPublicKey) return m;
+          if (!privateKey || !peerPublicKeyB64) return m;
           try {
-            const text = await decryptText(privateKey, await publicKeyToBase64(peerPublicKey), m.content);
+            const text = await decryptText(privateKey, peerPublicKeyB64, m.content);
             return { ...m, content: text };
           } catch (e) {
             log.warn('E2EE: не удалось расшифровать сообщение:', e);
@@ -298,12 +322,25 @@ function QuickChatModal({
         async (payload) => {
           const newMessage = payload.new as Message;
           let message = newMessage;
+
+          let privateKey: Uint8Array | null = null;
+          let peerPublicKeyB64: string | null = null;
+          try {
+            privateKey = myId ? await getLocalPrivateKey(myId) : null;
+            if (newMessage.sender_id) {
+              const peerPublicKey = await getPublicKey(newMessage.sender_id);
+              if (peerPublicKey) {
+                peerPublicKeyB64 = await publicKeyToBase64(peerPublicKey);
+              }
+            }
+          } catch (e) {
+            log.warn('E2EE: не удалось прочитать ключи для realtime-сообщения:', e);
+          }
+
           if (message.image_path) {
-            const privateKey = myId ? await getLocalPrivateKey(myId) : null;
-            const peerPublicKey = newMessage.sender_id ? await getPublicKey(newMessage.sender_id) : null;
-            if (privateKey && peerPublicKey) {
+            if (privateKey && peerPublicKeyB64) {
               try {
-                const result = await decryptChatImage(privateKey, await publicKeyToBase64(peerPublicKey), newMessage.content);
+                const result = await decryptChatImage(privateKey, peerPublicKeyB64, newMessage.content);
                 if (result && message.image_path) {
                   const uri = await writeDecryptedImage(result.bytes, result.format.mimeType, message.image_path);
                   setDecryptedImages((prev) => ({ ...prev, [message.image_path as string]: uri }));
@@ -315,16 +352,12 @@ function QuickChatModal({
             setMessages((prev) => [...prev, message]);
             return;
           }
-          if (newMessage.content) {
-            const privateKey = myId ? await getLocalPrivateKey(myId) : null;
-            const peerPublicKey = newMessage.sender_id ? await getPublicKey(newMessage.sender_id) : null;
-            if (privateKey && peerPublicKey) {
-              try {
-                const text = await decryptText(privateKey, await publicKeyToBase64(peerPublicKey), newMessage.content);
-                message = { ...newMessage, content: text };
-              } catch (e) {
-                log.warn('E2EE: не удалось расшифровать realtime-сообщение:', e);
-              }
+          if (newMessage.content && privateKey && peerPublicKeyB64) {
+            try {
+              const text = await decryptText(privateKey, peerPublicKeyB64, newMessage.content);
+              message = { ...newMessage, content: text };
+            } catch (e) {
+              log.warn('E2EE: не удалось расшифровать realtime-сообщение:', e);
             }
           }
           setMessages((prev) => [...prev, message]);
@@ -354,43 +387,22 @@ function QuickChatModal({
     const content = text.trim();
     setText('');
 
-    const privateKey = myId ? await ensurePrivateKey(myId) : null;
     const { data: matchData } = await supabase
       .from('matches')
       .select('user_a, user_b')
       .eq('id', matchId)
       .maybeSingle();
     const recipientId = matchData ? (matchData.user_a === myId ? matchData.user_b : matchData.user_a) : null;
-    let recipientPublicKey: Uint8Array | null = null;
-    let peerKeyError: unknown = null;
-    try {
-      recipientPublicKey = recipientId ? await getPublicKey(recipientId) : null;
-    } catch (e) {
-      peerKeyError = e;
-    }
 
-    if (peerKeyError || !privateKey) {
+    const session = await prepareSendSession(myId, recipientId);
+    if (!session.ok) {
       setText(content);
       setSending(false);
-      log.warn('E2EE: не удалось подготовить сессию шифрования:', peerKeyError);
-      appAlert.alert(
-        'Ошибка',
-        peerKeyError
-          ? 'Сервер не готов к шифрованной переписке: похоже, не применена миграция E2EE.'
-          : 'Не удалось создать ключ шифрования на этом устройстве. Попробуйте выйти из аккаунта и войти снова.'
-      );
+      log.warn('E2EE: не удалось подготовить сессию шифрования:', session.cause ?? session.message);
+      appAlert.alert(session.title, session.message);
       return;
     }
-    if (!recipientPublicKey) {
-      setText(content);
-      setSending(false);
-      appAlert.alert(
-        'Собеседник ещё не готов',
-        'У собеседника пока нет ключа шифрования. Ему нужно открыть приложение версии 0.0.18 или новее.'
-      );
-      return;
-    }
-    const payload = await encryptText(privateKey, await publicKeyToBase64(recipientPublicKey), content);
+    const payload = await encryptText(session.privateKey, session.peerPublicKeyB64, content);
     const { error } = await supabase.from('messages').insert({ match_id: matchId, sender_id: myId, content: JSON.stringify(payload) });
     setSending(false);
     if (error) {
@@ -417,33 +429,23 @@ function QuickChatModal({
 
     setUploadingImage(true);
     try {
-      const privateKey = myId ? await ensurePrivateKey(myId) : null;
       const { data: matchData } = await supabase
         .from('matches')
         .select('user_a, user_b')
         .eq('id', matchId)
         .maybeSingle();
       const recipientId = matchData ? (matchData.user_a === myId ? matchData.user_b : matchData.user_a) : null;
-      if (!privateKey) {
-        throw new Error('не удалось создать ключ шифрования на этом устройстве.');
-      }
-      let recipientPublicKey: Uint8Array | null = null;
-      try {
-        recipientPublicKey = recipientId ? await getPublicKey(recipientId) : null;
-      } catch (e) {
-        log.warn('E2EE: не удалось получить публичный ключ собеседника:', e);
-        throw new Error('сервер не готов к шифрованной переписке (не применена миграция E2EE).');
-      }
-      if (!recipientPublicKey) {
-        throw new Error(
-          'у собеседника пока нет ключа шифрования — ему нужно открыть приложение версии 0.0.18 или новее.'
-        );
+
+      const session = await prepareSendSession(myId, recipientId);
+      if (!session.ok) {
+        log.warn('E2EE: не удалось подготовить сессию шифрования:', session.cause ?? session.message);
+        throw new Error(session.message);
       }
       const { path, payload, bytes, format } = await uploadEncryptedChatImage(
         matchId,
         result.assets[0].uri,
-        privateKey,
-        await publicKeyToBase64(recipientPublicKey)
+        session.privateKey,
+        session.peerPublicKeyB64
       );
       const { error } = await supabase.from('messages').insert({
         match_id: matchId,

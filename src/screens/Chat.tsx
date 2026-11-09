@@ -11,7 +11,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '../lib/supabase';
 import { decryptChatImage, getSignedChatImageUrls, uploadEncryptedChatImage, writeDecryptedImage } from '../lib/chatImages';
 import { colors } from '../lib/theme';
-import { decryptText, encryptText, ensurePrivateKey, getLocalPrivateKey, getPublicKey, publicKeyToBase64 } from '../lib/e2ee';
+import { decryptText, encryptText, getLocalPrivateKey, getPublicKey, prepareSendSession, publicKeyToBase64 } from '../lib/e2ee';
 
 type Message = {
   id: string;
@@ -120,35 +120,53 @@ export default function Chat() {
       return;
     }
 
+    // Ключи нужны для каждого сообщения, но читать их из БД N раз незачем.
+    const privateKey = await getLocalPrivateKey(user.id);
+    let peerPublicKeyB64: string | null = null;
+    if (peerId) {
+      try {
+        const peerPublicKey = await getPublicKey(peerId);
+        if (peerPublicKey) {
+          peerPublicKeyB64 = await publicKeyToBase64(peerPublicKey);
+        }
+      } catch (e) {
+        // Сообщения всё равно показываем: при отсутствии гранта на
+        // profiles.public_key расшифровать их не получится, но список не
+        // должен пропадать из-за одной ошибки чтения ключа.
+        log.warn('E2EE: не удалось прочитать публичный ключ собеседника:', e);
+      }
+    }
+
     const loaded = await Promise.all(
       (data || []).map(async (m) => {
-        const privateKey = user.id ? await getLocalPrivateKey(user.id) : null;
-        const peerPublicKey = peerId ? await getPublicKey(peerId) : null;
-
         // Изображение: content — зашифрованный JSON envelope, image_path —
         // ciphertext в storage. Расшифровываем байты и кешируем displayable URI.
         if (m.image_path) {
           const path = m.image_path;
-          if (!privateKey || !peerPublicKey || !path) {
+          if (!privateKey || !peerPublicKeyB64 || !path) {
             return m;
           }
-          const result = await decryptChatImage(privateKey, await publicKeyToBase64(peerPublicKey), m.content);
-          if (!result) {
-            return m;
+          try {
+            const result = await decryptChatImage(privateKey, peerPublicKeyB64, m.content);
+            if (!result) {
+              return m;
+            }
+            const uri = await writeDecryptedImage(result.bytes, result.format.mimeType, path);
+            setDecryptedImages((prev) => ({ ...prev, [path]: uri }));
+          } catch (e) {
+            log.warn('E2EE: не удалось расшифровать изображение:', e);
           }
-          const uri = await writeDecryptedImage(result.bytes, result.format.mimeType, path);
-          setDecryptedImages((prev) => ({ ...prev, [path]: uri }));
           return m;
         }
 
         if (!m.content) {
           return m;
         }
-        if (!privateKey || !peerPublicKey) {
+        if (!privateKey || !peerPublicKeyB64) {
           return m;
         }
         try {
-          const text = await decryptText(privateKey, await publicKeyToBase64(peerPublicKey), m.content);
+          const text = await decryptText(privateKey, peerPublicKeyB64, m.content);
           return { ...m, content: text };
         } catch (e) {
           log.warn('E2EE: не удалось расшифровать сообщение:', e);
@@ -187,12 +205,25 @@ export default function Chat() {
         async (payload) => {
           const newMessage = payload.new as Message;
           let message = newMessage;
+
+          let privateKey: Uint8Array | null = null;
+          let peerPublicKeyB64: string | null = null;
+          try {
+            privateKey = myId ? await getLocalPrivateKey(myId) : null;
+            if (peerId) {
+              const peerPublicKey = await getPublicKey(peerId);
+              if (peerPublicKey) {
+                peerPublicKeyB64 = await publicKeyToBase64(peerPublicKey);
+              }
+            }
+          } catch (e) {
+            log.warn('E2EE: не удалось прочитать ключи для realtime-сообщения:', e);
+          }
+
           if (message.image_path) {
-            const privateKey = myId ? await getLocalPrivateKey(myId) : null;
-            const peerPublicKey = peerId ? await getPublicKey(peerId) : null;
-            if (privateKey && peerPublicKey) {
+            if (privateKey && peerPublicKeyB64) {
               try {
-                const result = await decryptChatImage(privateKey, await publicKeyToBase64(peerPublicKey), newMessage.content);
+                const result = await decryptChatImage(privateKey, peerPublicKeyB64, newMessage.content);
                 if (result && message.image_path) {
                   const uri = await writeDecryptedImage(result.bytes, result.format.mimeType, message.image_path);
                   setDecryptedImages((prev) => ({ ...prev, [message.image_path as string]: uri }));
@@ -204,16 +235,12 @@ export default function Chat() {
             setMessages((prev) => [...prev, message]);
             return;
           }
-          if (newMessage.content) {
-            const privateKey = myId ? await getLocalPrivateKey(myId) : null;
-            const peerPublicKey = peerId ? await getPublicKey(peerId) : null;
-            if (privateKey && peerPublicKey) {
-              try {
-                const text = await decryptText(privateKey, await publicKeyToBase64(peerPublicKey), newMessage.content);
-                message = { ...newMessage, content: text };
-              } catch (e) {
-                log.warn('E2EE: не удалось расшифровать realtime-сообщение:', e);
-              }
+          if (newMessage.content && privateKey && peerPublicKeyB64) {
+            try {
+              const text = await decryptText(privateKey, peerPublicKeyB64, newMessage.content);
+              message = { ...newMessage, content: text };
+            } catch (e) {
+              log.warn('E2EE: не удалось расшифровать realtime-сообщение:', e);
             }
           }
           setMessages((prev) => [...prev, message]);
@@ -243,37 +270,15 @@ export default function Chat() {
     const content = text.trim();
     setText('');
 
-    const privateKey = myId ? await ensurePrivateKey(myId) : null;
-    let peerPublicKey: Uint8Array | null = null;
-    let peerKeyError: unknown = null;
-    try {
-      peerPublicKey = peerId ? await getPublicKey(peerId) : null;
-    } catch (e) {
-      peerKeyError = e;
-    }
-
-    if (peerKeyError || !privateKey) {
+    const session = await prepareSendSession(myId, peerId);
+    if (!session.ok) {
       setText(content);
       setSending(false);
-      log.warn('E2EE: не удалось подготовить сессию шифрования:', peerKeyError);
-      appAlert.alert(
-        'Ошибка',
-        peerKeyError
-          ? 'Сервер не готов к шифрованной переписке: похоже, не применена миграция E2EE.'
-          : 'Не удалось создать ключ шифрования на этом устройстве. Попробуйте выйти из аккаунта и войти снова.'
-      );
+      log.warn('E2EE: не удалось подготовить сессию шифрования:', session.cause ?? session.message);
+      appAlert.alert(session.title, session.message);
       return;
     }
-    if (!peerPublicKey) {
-      setText(content);
-      setSending(false);
-      appAlert.alert(
-        'Собеседник ещё не готов',
-        'У собеседника пока нет ключа шифрования. Ему нужно открыть приложение версии 0.0.18 или новее.'
-      );
-      return;
-    }
-    const payload = await encryptText(privateKey, await publicKeyToBase64(peerPublicKey), content);
+    const payload = await encryptText(session.privateKey, session.peerPublicKeyB64, content);
     const { error } = await supabase.from('messages').insert({
       match_id: matchId,
       sender_id: myId,
@@ -306,27 +311,16 @@ export default function Chat() {
 
     setUploadingImage(true);
     try {
-      const privateKey = myId ? await ensurePrivateKey(myId) : null;
-      if (!privateKey) {
-        throw new Error('не удалось создать ключ шифрования на этом устройстве.');
-      }
-      let peerPublicKey: Uint8Array | null = null;
-      try {
-        peerPublicKey = peerId ? await getPublicKey(peerId) : null;
-      } catch (e) {
-        log.warn('E2EE: не удалось получить публичный ключ собеседника:', e);
-        throw new Error('сервер не готов к шифрованной переписке (не применена миграция E2EE).');
-      }
-      if (!peerPublicKey) {
-        throw new Error(
-          'у собеседника пока нет ключа шифрования — ему нужно открыть приложение версии 0.0.18 или новее.'
-        );
+      const session = await prepareSendSession(myId, peerId);
+      if (!session.ok) {
+        log.warn('E2EE: не удалось подготовить сессию шифрования:', session.cause ?? session.message);
+        throw new Error(session.message);
       }
       const { path, payload, bytes, format } = await uploadEncryptedChatImage(
         matchId,
         result.assets[0].uri,
-        privateKey,
-        await publicKeyToBase64(peerPublicKey)
+        session.privateKey,
+        session.peerPublicKeyB64
       );
       const { error } = await supabase.from('messages').insert({
         match_id: matchId,
