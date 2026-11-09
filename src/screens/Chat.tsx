@@ -12,6 +12,7 @@ import { supabase } from '../lib/supabase';
 import { decryptChatImage, getSignedChatImageUrls, uploadEncryptedChatImage, writeDecryptedImage } from '../lib/chatImages';
 import { colors } from '../lib/theme';
 import { decryptText, encryptText, getLocalPrivateKey, getPublicKey, prepareSendSession, publicKeyToBase64 } from '../lib/e2ee';
+import { offerKeyReset } from '../lib/e2eeReset';
 
 type Message = {
   id: string;
@@ -275,7 +276,14 @@ export default function Chat() {
       setText(content);
       setSending(false);
       log.warn('E2EE: не удалось подготовить сессию шифрования:', session.cause ?? session.message);
-      appAlert.alert(session.title, session.message);
+      if (session.needsKeyReset) {
+        // Ключ остался от старой установки: предлагаем заменить и повторить
+        // отправку. Текст уже возвращён в поле, поэтому handleSend() заново
+        // возьмёт то же содержимое.
+        offerKeyReset(myId, session.message, () => handleSend());
+      } else {
+        appAlert.alert(session.title, session.message);
+      }
       return;
     }
     const payload = await encryptText(session.privateKey, session.peerPublicKeyB64, content);
@@ -309,16 +317,29 @@ export default function Chat() {
 
     if (result.canceled || !result.assets?.[0]?.uri) return;
 
+    await sendImage(result.assets[0].uri);
+  }
+
+  // Вынесено из handlePickImage, чтобы после замены ключа можно было повторить
+  // отправку уже выбранного фото, а не заставлять пользователя выбирать его
+  // заново.
+  async function sendImage(uri: string) {
+    if (!myId) return;
     setUploadingImage(true);
     try {
       const session = await prepareSendSession(myId, peerId);
       if (!session.ok) {
         log.warn('E2EE: не удалось подготовить сессию шифрования:', session.cause ?? session.message);
+        if (session.needsKeyReset) {
+          setUploadingImage(false);
+          offerKeyReset(myId, session.message, () => sendImage(uri));
+          return;
+        }
         throw new Error(session.message);
       }
       const { path, payload, bytes, format } = await uploadEncryptedChatImage(
         matchId,
-        result.assets[0].uri,
+        uri,
         session.privateKey,
         session.peerPublicKeyB64
       );
@@ -329,8 +350,8 @@ export default function Chat() {
         content: JSON.stringify(payload),
       });
       if (error) throw new Error(error.message);
-      const uri = await writeDecryptedImage(bytes, format.mimeType, path);
-      setDecryptedImages((prev) => ({ ...prev, [path]: uri }));
+      const displayUri = await writeDecryptedImage(bytes, format.mimeType, path);
+      setDecryptedImages((prev) => ({ ...prev, [path]: displayUri }));
     } catch (e: any) {
       appAlert.alert('Ошибка', 'Не удалось отправить фото: ' + e.message);
     }

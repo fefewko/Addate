@@ -190,9 +190,38 @@ export async function publicKeyToBase64(publicKey: Uint8Array): Promise<string> 
   return bytesToBase64(publicKey);
 }
 
+// Заменяет ключ шифрования на этом устройстве и публикует новый публичный
+// ключ в профиле.
+//
+// Зачем: приватный ключ живёт только локально (AsyncStorage). После
+// переустановки приложения или очистки данных он потерян, а в профиле остаётся
+// ключ старой установки — ensureIdentity видит конфликт и отправка блокируется
+// навсегда. Замена возвращает возможность переписки; старая история при этом
+// остаётся шифртекстом, который уже никем не читается.
+export async function resetIdentity(
+  userId: string
+): Promise<{ publicKeyB64: string; privateKey: Uint8Array }> {
+  const pair = getNacl().box.keyPair();
+
+  // Сначала локально, потом в профиль: если публикация не удастся, повторная
+  // попытка возьмёт этот же ключ, а не создаст ещё один.
+  await AsyncStorage.setItem(privateKeyKey(userId), bytesToBase64(pair.secretKey));
+  const publicKeyB64 = bytesToBase64(pair.publicKey);
+  await savePublicKey(userId, publicKeyB64);
+
+  return { publicKeyB64, privateKey: pair.secretKey };
+}
+
 export type PreparedSession =
   | { ok: true; privateKey: Uint8Array; peerPublicKeyB64: string }
-  | { ok: false; title: string; message: string; cause?: unknown };
+  | {
+      ok: false;
+      title: string;
+      message: string;
+      cause?: unknown;
+      /** true — ключ можно заменить на новый (старые сообщения станут нечитаемыми). */
+      needsKeyReset?: boolean;
+    };
 
 // Готовит всё необходимое для отправки сообщения и, если что-то не так,
 // возвращает точную причину. Порядок проверок важен: сначала свой ключ, потом
@@ -217,9 +246,10 @@ export async function prepareSendSession(
   if (identity.keyConflict) {
     return {
       ok: false,
-      title: 'Ключ другого устройства',
+      title: 'Нужен новый ключ шифрования',
       message:
-        'В профиле сохранён ключ шифрования другого устройства. Отправка с этого устройства невозможна: войдите в аккаунт на том устройстве.',
+        'В профиле сохранён ключ шифрования другого устройства, а на этом устройстве приватного ключа нет. Так бывает после переустановки приложения или очистки данных. Ключ можно заменить — переписка снова заработает, но старые сообщения останутся зашифрованными и прочитать их будет нельзя.',
+      needsKeyReset: true,
     };
   }
 

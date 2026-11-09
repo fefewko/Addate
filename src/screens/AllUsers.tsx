@@ -13,6 +13,7 @@ import { likeProfile } from '../lib/matches';
 import { supabase } from '../lib/supabase';
 import { getMyCoordinates } from '../lib/location';
 import { decryptText, encryptText, getLocalPrivateKey, getPublicKey, prepareSendSession, publicKeyToBase64 } from '../lib/e2ee';
+import { offerKeyReset } from '../lib/e2eeReset';
 import LoadError from '../ui/LoadError';
 import { SOBRIETY_LABEL, SOBRIETY_OPTIONS, SUBSTANCE_OPTIONS, SobrietyStatus, calcAge, isOnline, formatDistance } from '../lib/profileDisplay';
 import { colors } from '../lib/theme';
@@ -381,25 +382,35 @@ function QuickChatModal({
     }
   }, []);
 
+  async function resolveRecipientId(): Promise<string | null> {
+    if (!myId || !matchId) return null;
+    const { data: matchData } = await supabase
+      .from('matches')
+      .select('user_a, user_b')
+      .eq('id', matchId)
+      .maybeSingle();
+    if (!matchData) return null;
+    return matchData.user_a === myId ? matchData.user_b : matchData.user_a;
+  }
+
   async function handleSend() {
     if (!text.trim() || !myId || !matchId) return;
     setSending(true);
     const content = text.trim();
     setText('');
 
-    const { data: matchData } = await supabase
-      .from('matches')
-      .select('user_a, user_b')
-      .eq('id', matchId)
-      .maybeSingle();
-    const recipientId = matchData ? (matchData.user_a === myId ? matchData.user_b : matchData.user_a) : null;
+    const recipientId = await resolveRecipientId();
 
     const session = await prepareSendSession(myId, recipientId);
     if (!session.ok) {
       setText(content);
       setSending(false);
       log.warn('E2EE: не удалось подготовить сессию шифрования:', session.cause ?? session.message);
-      appAlert.alert(session.title, session.message);
+      if (session.needsKeyReset) {
+        offerKeyReset(myId, session.message, () => handleSend());
+      } else {
+        appAlert.alert(session.title, session.message);
+      }
       return;
     }
     const payload = await encryptText(session.privateKey, session.peerPublicKeyB64, content);
@@ -427,23 +438,30 @@ function QuickChatModal({
 
     if (result.canceled || !result.assets?.[0]?.uri) return;
 
+    await sendImage(result.assets[0].uri);
+  }
+
+  // Вынесено из handlePickImage: после замены ключа повторяем отправку уже
+  // выбранного фото, а не просим выбрать его заново.
+  async function sendImage(uri: string) {
+    if (!myId || !matchId) return;
     setUploadingImage(true);
     try {
-      const { data: matchData } = await supabase
-        .from('matches')
-        .select('user_a, user_b')
-        .eq('id', matchId)
-        .maybeSingle();
-      const recipientId = matchData ? (matchData.user_a === myId ? matchData.user_b : matchData.user_a) : null;
+      const recipientId = await resolveRecipientId();
 
       const session = await prepareSendSession(myId, recipientId);
       if (!session.ok) {
         log.warn('E2EE: не удалось подготовить сессию шифрования:', session.cause ?? session.message);
+        if (session.needsKeyReset) {
+          setUploadingImage(false);
+          offerKeyReset(myId, session.message, () => sendImage(uri));
+          return;
+        }
         throw new Error(session.message);
       }
       const { path, payload, bytes, format } = await uploadEncryptedChatImage(
         matchId,
-        result.assets[0].uri,
+        uri,
         session.privateKey,
         session.peerPublicKeyB64
       );
@@ -454,8 +472,8 @@ function QuickChatModal({
         content: JSON.stringify(payload),
       });
       if (error) throw new Error(error.message);
-      const uri = await writeDecryptedImage(bytes, format.mimeType, path);
-      setDecryptedImages((prev) => ({ ...prev, [path]: uri }));
+      const displayUri = await writeDecryptedImage(bytes, format.mimeType, path);
+      setDecryptedImages((prev) => ({ ...prev, [path]: displayUri }));
     } catch (e: any) {
       appAlert.alert('Ошибка', 'Не удалось отправить фото: ' + e.message);
     }
