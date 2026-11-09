@@ -14,7 +14,8 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import LoadError from '../ui/LoadError';
 import { calcAge } from '../lib/profileDisplay';
-import { readableMessagePreview } from '../lib/messagePreview';
+import { decryptText, getLocalPrivateKey } from '../lib/e2ee';
+import { ENCRYPTED_PREVIEW, readableMessagePreview } from '../lib/messagePreview';
 import { colors } from '../lib/theme';
 
 type MatchRow = {
@@ -39,6 +40,78 @@ type MatchItem = {
   lastMessagePreview: string | null;
   hasUnread: boolean;
 };
+
+const PREVIEW_MAX_LENGTH = 60;
+
+function isEncryptedContent(content: string): boolean {
+  const compact = content.replace(/\s+/g, '');
+  return compact.startsWith('{"v":1') && compact.includes('"nonce"');
+}
+
+function shorten(text: string): string {
+  const clean = text.replace(/\s+/g, ' ').trim();
+  if (!clean) return '';
+  return clean.length > PREVIEW_MAX_LENGTH ? `${clean.slice(0, PREVIEW_MAX_LENGTH)}…` : clean;
+}
+
+// Достаёт последнее сообщение диалога и расшифровывает его на клиенте:
+// сервер ключей не имеет и увидеть текст принципиально не может. Поэтому
+// превью строится здесь, а matches.last_message_preview используется только
+// как запасной вариант (например, для старых незашифрованных сообщений).
+//
+// Запрос на каждый диалог — это N+1, но в списке обычно десятки диалогов,
+// а каждый запрос отдаёт одну строку по индексу (match_id, created_at).
+// Серверный RPC с DISTINCT ON был бы экономнее, но потребовал бы ещё одной
+// миграции: без неё список диалогов остался бы без превью.
+async function loadLastMessagePreview(
+  matchId: string,
+  fallback: string | null,
+  myId: string,
+  privateKey: Uint8Array | null,
+  peerPublicKeyB64: string | null
+): Promise<string | null> {
+  const { data: msg, error } = await supabase
+    .from('messages')
+    .select('sender_id, content, image_path')
+    .eq('match_id', matchId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !msg) {
+    return readableMessagePreview(fallback);
+  }
+
+  const mine = msg.sender_id === myId;
+  const prefix = mine ? 'Вы: ' : '';
+
+  if (msg.image_path) {
+    return `${prefix}Фото`;
+  }
+
+  if (!msg.content) {
+    return readableMessagePreview(fallback);
+  }
+
+  // Старое сообщение без шифрования показываем как есть.
+  if (!isEncryptedContent(msg.content)) {
+    const short = shorten(msg.content);
+    return short ? `${prefix}${short}` : readableMessagePreview(fallback);
+  }
+
+  if (!privateKey || !peerPublicKeyB64) {
+    return `${prefix}${ENCRYPTED_PREVIEW}`;
+  }
+
+  try {
+    const decoded = await decryptText(privateKey, peerPublicKeyB64, msg.content);
+    const short = shorten(decoded);
+    return short ? `${prefix}${short}` : `${prefix}${ENCRYPTED_PREVIEW}`;
+  } catch (e) {
+    log.warn('Не удалось расшифровать превью сообщения:', e);
+    return `${prefix}${ENCRYPTED_PREVIEW}`;
+  }
+}
 
 // «5 мин», «2 ч», «3 дн» — для времени последнего сообщения в списке диалогов.
 function timeAgo(iso: string): string {
@@ -136,6 +209,54 @@ export default function ChatList() {
       unreadMatchIds = new Set((unreadRows || []).map((m) => m.match_id));
     }
 
+    // Превью последнего сообщения: расшифровываем на клиенте.
+    let privateKey: Uint8Array | null = null;
+    if (rows.length > 0) {
+      try {
+        privateKey = await getLocalPrivateKey(user.id);
+      } catch (e) {
+        log.warn('Не удалось прочитать локальный ключ для превью диалогов:', e);
+      }
+    }
+
+    // Публичные ключи собеседников одним запросом: по одному на диалог было бы
+    // ещё N запросов к profiles.
+    const peerPublicKeys = new Map<string, string>();
+    const otherIds = Array.from(
+      new Set(rows.map((m) => (m.user_a === user.id ? m.user_b : m.user_a)))
+    );
+
+    if (otherIds.length > 0) {
+      try {
+        const { data: keyRows, error: keyError } = await supabase
+          .from('profiles')
+          .select('id, public_key')
+          .in('id', otherIds);
+        if (keyError) throw keyError;
+        (keyRows || []).forEach((row) => {
+          const r = row as { id: string; public_key: string | null };
+          if (r.public_key) peerPublicKeys.set(r.id, r.public_key);
+        });
+      } catch (e) {
+        log.warn('Не удалось прочитать публичные ключи для превью диалогов:', e);
+      }
+    }
+
+    const previewByMatch = new Map<string, string | null>();
+    await Promise.all(
+      rows.map(async (m) => {
+        const otherId = m.user_a === user.id ? m.user_b : m.user_a;
+        const preview = await loadLastMessagePreview(
+          m.id,
+          m.last_message_preview,
+          user.id,
+          privateKey,
+          peerPublicKeys.get(otherId) ?? null
+        );
+        previewByMatch.set(m.id, preview);
+      })
+    );
+
     const mapped: MatchItem[] = rows.map((m) => {
       const iAmUserA = m.user_a === user.id;
       const otherProfile = iAmUserA ? m.user_b_profile : m.user_a_profile;
@@ -147,7 +268,8 @@ export default function ChatList() {
         otherPhoto: otherProfile?.photo_url || null,
         matchedAt: m.matched_at,
         lastMessageAt: m.last_message_at,
-        lastMessagePreview: readableMessagePreview(m.last_message_preview),
+        lastMessagePreview:
+          previewByMatch.get(m.id) ?? readableMessagePreview(m.last_message_preview),
         hasUnread: unreadMatchIds.has(m.id),
       };
     });
