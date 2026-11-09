@@ -14,6 +14,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import LoadError from '../ui/LoadError';
 import { calcAge } from '../lib/profileDisplay';
+import { readableMessagePreview } from '../lib/messagePreview';
 import { colors } from '../lib/theme';
 
 type MatchRow = {
@@ -146,7 +147,7 @@ export default function ChatList() {
         otherPhoto: otherProfile?.photo_url || null,
         matchedAt: m.matched_at,
         lastMessageAt: m.last_message_at,
-        lastMessagePreview: m.last_message_preview,
+        lastMessagePreview: readableMessagePreview(m.last_message_preview),
         hasUnread: unreadMatchIds.has(m.id),
       };
     });
