@@ -134,6 +134,15 @@ export default function Settings() {
       <TouchableOpacity style={styles.actionRow} onPress={handleUpdateLocation} disabled={updatingLocation}><Text style={styles.actionText}>{updatingLocation ? 'Обновляем…' : 'Обновить геопозицию вручную'}</Text></TouchableOpacity>
       <Text style={styles.hint}>Используется для подбора анкет и расчёта расстояния.</Text>
 
+      <Text style={styles.sectionTitle}>Шифрование</Text>
+      <TouchableOpacity style={styles.actionRow} onPress={() => navigation.navigate('KeyBackup')}>
+        <Text style={styles.actionText}>Резервная копия ключа переписки</Text>
+      </TouchableOpacity>
+      <Text style={styles.hint}>
+        Ключ хранится только на устройстве. Копия, зашифрованная паролем, позволит
+        восстановить историю переписки после переустановки приложения.
+      </Text>
+
       <Text style={styles.sectionTitle}>Документы</Text>
       {DOCS.map(([label, url]) => <TouchableOpacity key={url} style={styles.actionRow} onPress={() => openDoc(url)}><Text style={styles.actionText}>{label}</Text></TouchableOpacity>)}
 

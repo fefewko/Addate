@@ -26,6 +26,7 @@ import Feed from './src/screens/Feed';
 import AllUsers from './src/screens/AllUsers';
 import ChatList from './src/screens/ChatList';
 import Chat from './src/screens/Chat';
+import KeyBackup from './src/screens/KeyBackup';
 import Profile from './src/screens/Profile';
 import Settings from './src/screens/Settings';
 import BlockedUsers from './src/screens/BlockedUsers';
@@ -390,6 +391,11 @@ export default function App() {
           options={{ title: 'Анкета', headerStyle: { backgroundColor: colors.bg }, headerTintColor: colors.textPrimary }}
         />
         <Stack.Screen name="Chat" component={Chat} options={{ title: 'Чат' }} />
+        <Stack.Screen
+          name="KeyBackup"
+          component={KeyBackup}
+          options={{ title: 'Ключ шифрования' }}
+        />
         <Stack.Screen
           name="Settings"
           component={Settings}

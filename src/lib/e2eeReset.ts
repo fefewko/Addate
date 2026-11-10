@@ -14,7 +14,9 @@
 // пользователь пытался выполнить.
 
 import { appAlert } from './alert';
+import { log } from './log';
 import { resetIdentity } from './e2ee';
+import { refreshKeyBackupAfterReset } from './keyBackup';
 
 export function offerKeyReset(
   userId: string,
@@ -32,6 +34,12 @@ export function offerKeyReset(
         onPress: async () => {
           try {
             await resetIdentity(userId);
+            // Копия должна соответствовать новому ключу: иначе следующий
+            // вход на новом устройстве вернул бы потерянный старый ключ и
+            // сделал нечитаемыми сообщения, отправленные после замены.
+            await refreshKeyBackupAfterReset(userId).catch((e) =>
+              log.warn('Не удалось обновить резервную копию ключа после замены:', e)
+            );
             await retry();
           } catch (e: any) {
             appAlert.alert('Не удалось заменить ключ', e?.message ?? String(e));

@@ -6,6 +6,8 @@ import { appAlert } from '../lib/alert';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { loginWithTelegram } from '../lib/telegramAuth';
+import { syncKeyBackup } from '../lib/keyBackup';
+import { log } from '../lib/log';
 import { colors } from '../lib/theme';
 
 // Вход через Telegram временно скрыт из интерфейса — код и серверная часть
@@ -83,6 +85,22 @@ export default function SignIn() {
       setError('Не удалось получить данные пользователя.');
       setLoading(false);
       return;
+    }
+
+    // Резервная копия ключа E2EE. Пароль только что подтверждён сервером,
+    // поэтому копия будет расшифровываться именно им. На новом устройстве
+    // здесь восстанавливается приватный ключ, на прежнем — создаётся или
+    // обновляется копия. Ошибка не должна мешать входу.
+    try {
+      const backupResult = await syncKeyBackup(userId, password);
+      if (backupResult === 'restored') {
+        appAlert.alert(
+          'Ключ шифрования восстановлен',
+          'История переписки снова доступна на этом устройстве.'
+        );
+      }
+    } catch (e) {
+      log.warn('Резервная копия ключа: ', e);
     }
 
     await routeAfterLogin(userId);

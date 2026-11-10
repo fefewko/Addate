@@ -35,6 +35,7 @@ export type RootParamList = {
     otherAge?: number | null;
   };
   Settings: undefined;
+  KeyBackup: undefined;
   BlockedUsers: undefined;
   IncomingLikes: undefined;
 };

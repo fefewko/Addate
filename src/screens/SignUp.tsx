@@ -8,6 +8,7 @@ import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { colors } from '../lib/theme';
 import { emailRedirectUrl } from '../lib/webLinks';
+import { syncKeyBackup } from '../lib/keyBackup';
 import DateOfBirthInput from '../ui/DateOfBirthInput';
 import ConsentCheckbox from '../ui/ConsentCheckbox';
 import { EMPTY_PARTS, partsToIso, validateBirthDateParts, type BirthDateParts } from '../lib/date';
@@ -91,6 +92,15 @@ export default function SignUp() {
 
     setLoading(false);
     if (profileError) log.warn('Ошибка сохранения профиля/согласий:', profileError.message);
+
+    // Сразу создаём резервную копию ключа: пароль известен только здесь и на
+    // экране входа, а без копии переустановка снова означала бы потерю ключа.
+    try {
+      await syncKeyBackup(userId, password);
+    } catch (e) {
+      log.warn('Резервная копия ключа: ', e);
+    }
+
     navigation.reset({ index: 0, routes: [{ name: 'ProfileSetup' }] });
   }
 

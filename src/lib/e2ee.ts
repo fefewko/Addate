@@ -39,7 +39,9 @@ const privateKeyKey = (userId: string) => `e2ee:privateKey:${userId}`;
 // лениво: PRNG нужен только в момент реальной крипто-операции.
 let prngConfigured = false;
 
-function getNacl(): typeof nacl {
+// Экспортируется для резервной копии ключа (keyBackup.ts): ей нужен тот же
+// настроенный PRNG, а не второй экземпляр библиотеки.
+export function getNacl(): typeof nacl {
   if (!prngConfigured) {
     nacl.setPRNG((target: Uint8Array, length: number) => {
       // expo-crypto отдаёт не больше 1024 байт за вызов.
@@ -61,6 +63,17 @@ export async function getLocalPrivateKey(userId: string): Promise<Uint8Array | n
     return null;
   }
   return base64ToBytes(stored);
+}
+
+// Заменяет локальный приватный ключ. Нужно резервной копии (keyBackup.ts),
+// которая восстанавливает ключ после переустановки приложения.
+export async function setLocalPrivateKey(userId: string, privateKey: Uint8Array): Promise<void> {
+  await AsyncStorage.setItem(privateKeyKey(userId), bytesToBase64(privateKey));
+}
+
+// Публичный ключ (base64), соответствующий приватному.
+export function publicKeyFromSecretKey(privateKey: Uint8Array): string {
+  return bytesToBase64(getNacl().box.keyPair.fromSecretKey(privateKey).publicKey);
 }
 
 export type EnsureIdentityResult = {
@@ -97,12 +110,10 @@ export async function ensureIdentity(userId: string): Promise<EnsureIdentityResu
     let privateKey = await getLocalPrivateKey(userId);
     if (!privateKey) {
       privateKey = getNacl().box.keyPair().secretKey;
-      await AsyncStorage.setItem(privateKeyKey(userId), bytesToBase64(privateKey));
+      await setLocalPrivateKey(userId, privateKey);
     }
     result.privateKey = privateKey;
-    result.publicKeyB64 = bytesToBase64(
-      getNacl().box.keyPair.fromSecretKey(privateKey).publicKey
-    );
+    result.publicKeyB64 = publicKeyFromSecretKey(privateKey);
   } catch (e) {
     result.localKeyError = e;
     return result;
@@ -205,7 +216,7 @@ export async function resetIdentity(
 
   // Сначала локально, потом в профиль: если публикация не удастся, повторная
   // попытка возьмёт этот же ключ, а не создаст ещё один.
-  await AsyncStorage.setItem(privateKeyKey(userId), bytesToBase64(pair.secretKey));
+  await setLocalPrivateKey(userId, pair.secretKey);
   const publicKeyB64 = bytesToBase64(pair.publicKey);
   await savePublicKey(userId, publicKeyB64);
 
