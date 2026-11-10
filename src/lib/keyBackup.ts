@@ -266,21 +266,6 @@ async function deleteBackup(userId: string): Promise<void> {
   }
 }
 
-/** Есть ли на сервере копия. null — проверить не удалось (нет сети/прав). */
-export async function hasKeyBackup(userId: string): Promise<boolean | null> {
-  const { data, error } = await supabase
-    .from('e2ee_key_backups')
-    .select('user_id')
-    .eq('user_id', userId)
-    .maybeSingle();
-
-  if (error) {
-    log.warn('Резервная копия ключа: не удалось проверить наличие копии:', error.message);
-    return null;
-  }
-  return !!data;
-}
-
 function parsePayload(raw: string | null): KeyBackupPayload | null {
   if (!raw) return null;
   try {
@@ -318,6 +303,11 @@ async function createBackup(
   const nonce = nacl.randomBytes(SECRETBOX_NONCE_BYTES);
   const ciphertext = nacl.secretbox(privateKey, nonce, kek);
 
+  // Кеш пишем ДО отправки: если сервер недоступен или миграция ещё не
+  // применена, копию можно будет дослать позже без повторного ввода пароля
+  // (syncKeyBackupWithCache при следующем запуске приложения).
+  await cacheBackupKey(userId, kek, bytesToBase64(salt), iterations);
+
   await uploadBackup(userId, {
     v: 1,
     kdf: 'pbkdf2-sha512',
@@ -327,8 +317,6 @@ async function createBackup(
     ct: bytesToBase64(ciphertext),
     publicKey: publicKeyB64,
   });
-
-  await cacheBackupKey(userId, kek, bytesToBase64(salt), iterations);
 }
 
 async function restoreFromBackup(
@@ -431,23 +419,24 @@ export async function syncKeyBackup(
 }
 
 /**
- * Обновляет резервную копию после замены ключа (resetIdentity).
+ * Обновляет или досылает копию, используя закешированный ключ. Пароль не
+ * нужен, поэтому функция безопасна для вызова в фоне при запуске приложения.
  *
- * Без этого копия осталась бы от старого ключа, и следующий вход на новом
- * устройстве вернул бы потерянный ключ — сообщения, отправленные после замены,
- * снова стали бы нечитаемыми. Если выведенного ключа нет (пароль не вводили в
- * этой установке), копию удаляем: лучше никакой, чем заведомо устаревшая.
+ * Зачем: копия может не сохраниться при входе (нет сети, миграция применена
+ * позже) — тогда следующий запуск досылает её сам, без участия пользователя.
  */
-export async function refreshKeyBackupAfterReset(userId: string): Promise<void> {
+export async function syncKeyBackupWithCache(userId: string): Promise<void> {
+  const cached = await readCachedBackupKey(userId);
+  if (!cached) return;
+
   const privateKey = await getLocalPrivateKey(userId);
   if (!privateKey) return;
 
   const publicKeyB64 = publicKeyFromSecretKey(privateKey);
-  const cached = await readCachedBackupKey(userId);
 
-  if (!cached) {
-    await deleteBackup(userId);
-    return;
+  const meta = parsePayload(await fetchBackupRow(userId));
+  if (meta?.publicKey === publicKeyB64) {
+    return; // копия уже соответствует ключу на устройстве
   }
 
   const nacl = getNacl();
@@ -463,4 +452,22 @@ export async function refreshKeyBackupAfterReset(userId: string): Promise<void> 
     ct: bytesToBase64(ciphertext),
     publicKey: publicKeyB64,
   });
+}
+
+/**
+ * Обновляет резервную копию после замены ключа (resetIdentity).
+ *
+ * Без этого копия осталась бы от старого ключа, и следующий вход на новом
+ * устройстве вернул бы потерянный ключ — сообщения, отправленные после замены,
+ * снова стали бы нечитаемыми. Если выведенного ключа нет (пароль не вводили в
+ * этой установке), копию удаляем: лучше никакой, чем заведомо устаревшая.
+ */
+export async function refreshKeyBackupAfterReset(userId: string): Promise<void> {
+  const cached = await readCachedBackupKey(userId);
+  if (!cached) {
+    await deleteBackup(userId);
+    return;
+  }
+
+  await syncKeyBackupWithCache(userId);
 }

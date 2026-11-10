@@ -15,6 +15,7 @@ import * as Notifications from 'expo-notifications';
 
 import { supabase } from './src/lib/supabase';
 import { getOrCreateIdentity } from './src/lib/e2ee';
+import { syncKeyBackupWithCache } from './src/lib/keyBackup';
 import { registerForPushNotifications } from './src/lib/pushNotifications';
 import { isWeb, buildLinking, documentTitleFormatter } from './src/lib/webLinks';
 
@@ -26,7 +27,6 @@ import Feed from './src/screens/Feed';
 import AllUsers from './src/screens/AllUsers';
 import ChatList from './src/screens/ChatList';
 import Chat from './src/screens/Chat';
-import KeyBackup from './src/screens/KeyBackup';
 import Profile from './src/screens/Profile';
 import Settings from './src/screens/Settings';
 import BlockedUsers from './src/screens/BlockedUsers';
@@ -184,6 +184,13 @@ function Tabs() {
       if (!identity) {
         log.warn('E2EE: в профиле уже есть ключ другого устройства, локальная пара не создана');
       }
+
+      // Резервная копия ключа: если при входе её не удалось сохранить (не было
+      // сети или миграция применена позже), досылаем в фоне по закешированному
+      // ключу. Пользователь ничего не нажимает — пароль здесь не нужен.
+      await syncKeyBackupWithCache(user.id).catch((e) =>
+        log.warn('E2EE: не удалось обновить резервную копию ключа:', e)
+      );
     } catch (e) {
       log.warn('E2EE: не удалось подготовить ключи:', e);
     }
@@ -391,11 +398,6 @@ export default function App() {
           options={{ title: 'Анкета', headerStyle: { backgroundColor: colors.bg }, headerTintColor: colors.textPrimary }}
         />
         <Stack.Screen name="Chat" component={Chat} options={{ title: 'Чат' }} />
-        <Stack.Screen
-          name="KeyBackup"
-          component={KeyBackup}
-          options={{ title: 'Ключ шифрования' }}
-        />
         <Stack.Screen
           name="Settings"
           component={Settings}
