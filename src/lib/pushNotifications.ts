@@ -3,7 +3,7 @@ import * as Notifications from 'expo-notifications';
 import { log } from './log';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { supabase } from './supabase';
 
 // В браузере push-уведомлений нет. Важно: Device.isDevice на вебе возвращает
@@ -13,8 +13,9 @@ import { supabase } from './supabase';
 // платформы, а не устройства, закрывает и все остальные вызовы отсюда.
 const SUPPORTED = Platform.OS !== 'web';
 
-// Показывать уведомление баннером, даже если приложение открыто на переднем плане —
-// иначе по умолчанию Expo молчит, пока пользователь смотрит в экран.
+// Уведомление показываем только когда приложение не на переднем плане.
+// В активном приложении новое сообщение и так появляется в чате через realtime,
+// а баннер поверх экрана только мешает: пользователь и так видит переписку.
 //
 // shouldShowBanner — всплывающий баннер поверх экрана (Android и iOS 14+),
 // shouldShowList — запись в шторке уведомлений / Центре уведомлений.
@@ -25,12 +26,17 @@ const SUPPORTED = Platform.OS !== 'web';
 // поэтому не устанавливается вовсе.
 if (SUPPORTED) {
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-    }),
+    handleNotification: async () => {
+      // 'active' — пользователь смотрит в приложение. В 'background' и при
+      // закрытом приложении уведомление показывается как обычно.
+      const foreground = AppState.currentState === 'active';
+      return {
+        shouldShowBanner: !foreground,
+        shouldShowList: !foreground,
+        shouldPlaySound: !foreground,
+        shouldSetBadge: false,
+      };
+    },
   });
 }
 
