@@ -37,7 +37,6 @@ export type RootParamList = {
   Settings: undefined;
   Documents: undefined;
   ChangePassword: undefined;
-  PushDiagnostics: undefined;
   BlockedUsers: undefined;
   IncomingLikes: undefined;
 };

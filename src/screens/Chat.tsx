@@ -44,18 +44,20 @@ export default function Chat() {
   const [text, setText] = useState('');
   const [myId, setMyId] = useState<string | null>(null);
   const [peerId, setPeerId] = useState<string | null>(otherUserId ?? null);
+  const [peerName, setPeerName] = useState<string | null>(null);
+  const [peerPhoto, setPeerPhoto] = useState<string | null>(null);
   const [isSupport, setIsSupport] = useState(false);
   const [sending, setSending] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const listRef = useRef<FlatList>(null);
 
   useEffect(() => {
-    const title = otherAge ? `${otherName || 'Чат'}, ${otherAge}` : otherName || 'Чат';
+    const name = peerName || otherName;
+    const title = otherAge ? `${name || 'Чат'}, ${otherAge}` : name || 'Чат';
 
-    // Переход в анкету собеседника прямо из переписки: тап по иконке в шапке.
+    // Переход в анкету собеседника прямо из переписки: тап по аватарке в шапке.
     // peerId может прийти позже (при открытии по ссылке chat/:matchId), поэтому
-    // эффект зависит от него.
-    // У чата поддержки анкеты нет — иконку не показываем.
+    // эффект зависит от него. У чата поддержки анкеты нет — аватарку не показываем.
     const peerProfileId = isSupport ? null : peerId ?? otherUserId ?? null;
     navigation.setOptions({
       title,
@@ -67,29 +69,45 @@ export default function Chat() {
               accessibilityLabel="Открыть анкету"
               style={{ paddingHorizontal: 12, paddingVertical: 4 }}
             >
-              <Ionicons name="person-circle-outline" size={26} color={colors.textPrimary} />
+              {peerPhoto ? (
+                <Image source={{ uri: peerPhoto }} style={styles.headerAvatar} />
+              ) : (
+                <Ionicons name="person-circle-outline" size={26} color={colors.textPrimary} />
+              )}
             </TouchableOpacity>
           )
         : undefined,
     });
-  }, [navigation, otherName, otherAge, peerId, otherUserId, isSupport]);
+  }, [navigation, otherName, otherAge, peerId, otherUserId, isSupport, peerName, peerPhoto]);
 
   useEffect(() => {
-    // При входе по ссылке chat/:matchId в параметрах есть только matchId,
-    // без otherUserId. Раньше здесь шёл безусловный запрос с .eq('id', undefined),
-    // который PostgREST отклонял ошибкой — надо просто пропустить проверку.
-    if (!otherUserId) {
+    // Аватар и имя собеседника. Нужны и при открытии по ссылке chat/:matchId,
+    // когда в параметрах есть только matchId: раньше здесь был безусловный
+    // запрос с .eq('id', undefined), который PostgREST отклонял ошибкой.
+    if (!peerId) {
       setIsSupport(false);
+      setPeerName(null);
+      setPeerPhoto(null);
       return;
     }
 
+    let cancelled = false;
     supabase
       .from('profiles')
-      .select('is_admin')
-      .eq('id', otherUserId)
+      .select('display_name, photo_url, is_admin')
+      .eq('id', peerId)
       .maybeSingle()
-      .then(({ data }) => setIsSupport(!!data?.is_admin));
-  }, [otherUserId]);
+      .then(({ data }) => {
+        if (cancelled) return;
+        setIsSupport(!!data?.is_admin);
+        setPeerName(data?.display_name ?? null);
+        setPeerPhoto(data?.photo_url ?? null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [peerId]);
 
   // При входе по ссылке chat/:matchId в параметрах есть только matchId, без
   // otherUserId. Раньше в этом случае собеседник оставался неизвестным, и
@@ -477,12 +495,30 @@ export default function Chat() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.messageList}
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
-        renderItem={({ item }) => {
+        renderItem={({ item, index }) => {
           const isMine = item.sender_id === myId;
 
+          // Аватар собеседника — только у последнего сообщения серии, иначе он
+          // повторялся бы у каждого пузыря подряд.
+          const next = messages[index + 1];
+          const showAvatar = !isMine && (!next || next.sender_id !== item.sender_id);
+
+          const avatar = showAvatar ? (
+            peerPhoto ? (
+              <Image source={{ uri: peerPhoto }} style={styles.messageAvatar} />
+            ) : (
+              <View style={[styles.messageAvatar, styles.messageAvatarPlaceholder]}>
+                <Text style={styles.messageAvatarLetter}>
+                  {(peerName || otherName || '?').charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )
+          ) : null;
+
+          let bubble: React.ReactNode;
           if (item.image_path) {
             const url = item.image_path ? decryptedImages[item.image_path] ?? imageUrls[item.image_path] : null;
-            return (
+            bubble = (
               <View style={[styles.bubble, styles.imageBubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}>
                 {url ? (
                   <TouchableOpacity onPress={() => setPreviewUrl(url)}>
@@ -499,13 +535,20 @@ export default function Chat() {
                 )}
               </View>
             );
+          } else {
+            bubble = (
+              <View style={[styles.bubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}>
+                <Text style={isMine ? styles.bubbleTextMine : styles.bubbleTextTheirs}>
+                  {item.content}
+                </Text>
+              </View>
+            );
           }
 
           return (
-            <View style={[styles.bubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}>
-              <Text style={isMine ? styles.bubbleTextMine : styles.bubbleTextTheirs}>
-                {item.content}
-              </Text>
+            <View style={[styles.messageRow, isMine && styles.messageRowMine]}>
+              {!isMine && (avatar ?? <View style={styles.messageAvatarSpacer} />)}
+              {bubble}
             </View>
           );
         }}
@@ -563,10 +606,17 @@ const styles = StyleSheet.create({
   headerButtonText: { fontSize: 13, color: colors.textSecondary },
   blockText: { color: colors.danger },
   messageList: { padding: 14, flexGrow: 1 },
-  bubble: { maxWidth: '78%', borderRadius: 14, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 8 },
+  messageRow: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 8 },
+  messageRowMine: { justifyContent: 'flex-end' },
+  messageAvatar: { width: 30, height: 30, borderRadius: 15, marginRight: 8, backgroundColor: colors.border },
+  messageAvatarPlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  messageAvatarLetter: { color: colors.textMuted, fontSize: 13, fontWeight: '600' },
+  messageAvatarSpacer: { width: 38 },
+  headerAvatar: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.border },
+  bubble: { maxWidth: '78%', borderRadius: 14, paddingVertical: 10, paddingHorizontal: 14 },
   imageBubble: { padding: 4 },
-  bubbleMine: { backgroundColor: colors.accent, alignSelf: 'flex-end' },
-  bubbleTheirs: { backgroundColor: colors.border, alignSelf: 'flex-start' },
+  bubbleMine: { backgroundColor: colors.accent },
+  bubbleTheirs: { backgroundColor: colors.border },
   bubbleTextMine: { color: colors.white, fontSize: 15 },
   bubbleTextTheirs: { color: colors.textPrimary, fontSize: 15 },
   chatImage: { width: 200, height: 200, borderRadius: 10, backgroundColor: colors.surface },

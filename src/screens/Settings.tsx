@@ -117,13 +117,6 @@ export default function Settings() {
             Выключение снимает push-токен этого устройства. Разрешение операционной
             системы при этом остаётся — его можно вернуть тумблером.
           </Text>
-          <TouchableOpacity style={styles.actionRow} onPress={() => navigation.navigate('PushDiagnostics')}>
-            <Text style={styles.actionText}>Проверить, доходят ли уведомления</Text>
-          </TouchableOpacity>
-          <Text style={styles.hint}>
-            Пошаговая проверка: разрешение, токен устройства, отправка через Expo и тестовое
-            уведомление.
-          </Text>
         </>
       )}
 
