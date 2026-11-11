@@ -36,11 +36,17 @@ where n.nspname = 'public'
 -- ---------------------------------------------------------------------------
 -- 3. Исходящие HTTP-запросы триггера (pg_net)
 -- ---------------------------------------------------------------------------
--- Строка с status_code = 200 и телом {"ok":true} — функция отработала.
--- 401 — не совпал секрет PUSH_NOTIFY_SECRET. 404 — функция не задеплоена.
+-- После миграции 20261115000000_push_direct_pg_net.sql триггер сам отправляет
+-- запрос в Expo Push API. Ожидается status_code = 200 и content вида
+-- {"data":[{"status":"ok","id":"..."}]}.
+--
+-- status_code 401/404 — это ещё старый вариант через Edge Function.
+-- {"status":"error","details":{"error":"DeviceNotRegistered"}} — токен
+-- устройства устарел: нужно открыть приложение на этом телефоне, токен
+-- перезапишется. error_msg вместо status_code — база не смогла сделать запрос.
 select extname from pg_extension where extname = 'pg_net';
 
-select id, status_code, content, created
+select id, status_code, content, error_msg, created
 from net._http_response
 order by created desc
 limit 10;
