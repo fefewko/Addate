@@ -56,3 +56,22 @@ from pg_proc p
 join pg_namespace n on n.oid = p.pronamespace
 where n.nspname = 'public'
   and (p.proname ilike '%push%' or p.proname ilike '%notif%');
+
+-- ---------------------------------------------------------------------------
+-- 5. Права приложения на push_tokens
+-- ---------------------------------------------------------------------------
+-- Если политик на SELECT/INSERT/UPDATE нет (или есть только DELETE), приложение
+-- не может сохранить токен устройства — это и есть «Токен в базе: не удалось
+-- сохранить». Лечится файлом supabase/migrations/20261114000000_push_tokens_policies.sql.
+select policyname, cmd, roles, qual, with_check
+from pg_policies
+where schemaname = 'public'
+  and tablename = 'push_tokens'
+order by cmd, policyname;
+
+select grantee, privilege_type
+from information_schema.role_table_grants
+where table_schema = 'public'
+  and table_name = 'push_tokens'
+order by grantee, privilege_type;
+

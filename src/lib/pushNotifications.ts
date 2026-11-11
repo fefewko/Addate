@@ -232,6 +232,43 @@ async function waitForReceipt(id: string): Promise<any | null> {
   return null;
 }
 
+// Сохранение токена с текстом ошибки, а не молчаливым проглатыванием.
+//
+// Upsert требует сразу двух политик RLS: INSERT и UPDATE. Если на таблице есть
+// только одна из них (а на push_tokens долгое время была только политика на
+// удаление), строка не сохраняется, и приложение об этом не узнаёт. Поэтому
+// пробуем upsert, затем простую вставку: код 23505 означает, что строка уже
+// есть (её просто не видно из-за закрытого SELECT), а 42501 — что запись
+// запрещена политикой.
+type SavePushTokenResult =
+  | { ok: true }
+  | { ok: false; message: string; code?: string };
+
+async function savePushToken(userId: string, token: string): Promise<SavePushTokenResult> {
+  const row = {
+    user_id: userId,
+    expo_push_token: token,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await supabase
+    .from('push_tokens')
+    .upsert(row, { onConflict: 'user_id,expo_push_token' });
+  if (!error) return { ok: true };
+
+  const { error: insertError } = await supabase.from('push_tokens').insert(row);
+  if (!insertError) return { ok: true };
+
+  // Строка уже существует — значит, сохранена ранее, просто не читается.
+  if (insertError.code === '23505') return { ok: true };
+
+  return {
+    ok: false,
+    message: insertError.message || error.message || 'Неизвестная ошибка базы.',
+    code: insertError.code || error.code || undefined,
+  };
+}
+
 export async function runPushDiagnostics(): Promise<PushCheck[]> {
   const checks: PushCheck[] = [];
 
@@ -317,27 +354,35 @@ export async function runPushDiagnostics(): Promise<PushCheck[]> {
 
   let tokens = (rows || []).map((row) => row.expo_push_token);
   let saved = tokens.includes(token);
+  let saveError: SavePushTokenResult | null = null;
 
   if (!saved) {
-    // Токен не сохранён — обычно именно этого и не хватало. Сохраняем сейчас
-    // и перечитываем, чтобы проверка была не только диагностикой, но и
-    // починкой.
-    await registerForPushNotifications();
+    // Сохраняем сами и показываем настоящую ошибку базы: без её текста нельзя
+    // отличить запрет RLS от отсутствия колонки или гранта.
+    saveError = await savePushToken(user.id, token);
+
     const { data: retried } = await supabase
       .from('push_tokens')
       .select('expo_push_token')
       .eq('user_id', user.id);
     tokens = (retried || []).map((row) => row.expo_push_token);
-    saved = tokens.includes(token);
+    saved = tokens.includes(token) || saveError.ok;
   }
 
-  checks.push({
-    title: 'Токен в базе',
-    status: saved ? 'ok' : 'fail',
-    detail: saved
-      ? `Устройств в аккаунте: ${tokens.length}`
-      : 'Не удалось сохранить токен в push_tokens — уведомления некуда отправлять.',
-  });
+  if (saved) {
+    checks.push({
+      title: 'Токен в базе',
+      status: 'ok',
+      detail: tokens.length
+        ? `Устройств в аккаунте: ${tokens.length}`
+        : 'Токен сохранён (чтение списка закрыто политикой — на доставку не влияет).',
+    });
+  } else {
+    const detail = saveError && !saveError.ok
+      ? `Не удалось сохранить токен: ${saveError.message}${saveError.code ? ` (код ${saveError.code})` : ''}`
+      : 'Не удалось сохранить токен в push_tokens.';
+    checks.push({ title: 'Токен в базе', status: 'fail', detail });
+  }
 
   // Самопроверка: отправляем push самому себе через Expo Push API и смотрим,
   // что ответит сервис и что будет в квитанции о доставке.
