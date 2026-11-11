@@ -37,6 +37,8 @@ import ProfileDetail from './src/screens/ProfileDetail';
 import AuthCallback from './src/screens/AuthCallback';
 import LoadError from './src/ui/LoadError';
 import AlertHost from './src/ui/AlertHost';
+import ErrorBoundary from './src/ui/ErrorBoundary';
+import HeaderBackButton from './src/ui/HeaderBackButton';
 import { resolveInitialRoute, type InitialRoute } from './src/lib/initialRoute';
 import { log } from './src/lib/log';
 import type { RootNavigation, RootParamList } from './src/lib/navigation';
@@ -59,6 +61,18 @@ const TAB_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   ChatList: 'chatbubbles',
   Profile: 'person-circle',
 };
+
+// Экраны веба, которым кнопка «назад» в шапке не нужна: у первых четырёх
+// шапка скрыта, а ProfileSetup и ModerationPending — стартовые состояния
+// аккаунта, возврат из них вёл бы в тупик (в ленту без анкеты или в модерацию).
+const WEB_SCREENS_WITHOUT_BACK = [
+  'SignIn',
+  'SignUp',
+  'AuthCallback',
+  'ProfileSetup',
+  'ModerationPending',
+  'Tabs',
+];
 
 const HEARTBEAT_INTERVAL_MS = 45_000;
 
@@ -361,7 +375,7 @@ export default function App() {
   }
 
   return (
-    <>
+    <ErrorBoundary>
       {/* AlertHost живёт над навигатором: внутри стека его Modal закрывался бы
           вместе с экраном при переходе. На нативе он ничего не рисует — там
           диалоги показывает системный Alert. */}
@@ -383,7 +397,34 @@ export default function App() {
           ни к чему бы не привела. Ключ заставляет стек пересобраться, когда
           маршрут действительно изменился, и не трогает его, когда остался
           прежним: тогда пользователя не выбрасывает с текущего экрана. */}
-      <Stack.Navigator key={initialRoute} initialRouteName={initialRoute}>
+      <Stack.Navigator
+        key={initialRoute}
+        initialRouteName={initialRoute}
+        screenOptions={({ navigation, route }) => ({
+          // Шапка на вебе. Стрелка возврата рисуется стеком только когда в нём
+          // больше одного экрана: при прямом переходе по адресу (/chat/<id>,
+          // /profile/<id>, /settings) история пуста, и из шапки исчезала
+          // кнопка «назад» — из переписки нельзя было вернуться к сообщениям.
+          // Здесь стрелка есть всегда; при пустой истории уводим на вкладку,
+          // из которой экран открывается (чат — в список сообщений).
+          headerLeft:
+            isWeb() && !WEB_SCREENS_WITHOUT_BACK.includes(route.name)
+              ? () => (
+                  <HeaderBackButton
+                    onPress={() => {
+                      if (navigation.canGoBack()) {
+                        navigation.goBack();
+                        return;
+                      }
+                      navigation.navigate('Tabs', {
+                        screen: route.name === 'Chat' ? 'ChatList' : 'Feed',
+                      });
+                    }}
+                  />
+                )
+              : undefined,
+        })}
+      >
         <Stack.Screen name="SignIn" component={SignIn} options={{ headerShown: false }} />
         <Stack.Screen name="SignUp" component={SignUp} options={{ headerShown: false }} />
         <Stack.Screen name="AuthCallback" component={AuthCallback} options={{ headerShown: false }} />
@@ -442,6 +483,6 @@ export default function App() {
         />
       </Stack.Navigator>
       </NavigationContainer>
-    </>
+    </ErrorBoundary>
   );
 }

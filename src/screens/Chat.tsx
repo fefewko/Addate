@@ -34,7 +34,10 @@ const REPORT_CATEGORIES: { value: string; label: string }[] = [
 export default function Chat() {
   const navigation = useNavigation<RootNavigation>();
   const route = useRoute<any>();
-  const { matchId, otherUserId, otherName, otherAge } = route.params;
+  // params может не быть вовсе, если адрес пришёл без matchId (/chat/):
+  // без значения по умолчанию обращение к route.params падало бы при рендере
+  // и оставляло пустую страницу.
+  const { matchId, otherUserId, otherName, otherAge } = route.params ?? {};
   const insets = useSafeAreaInsets();
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -232,8 +235,10 @@ export default function Chat() {
       .is('read_at', null);
   }, [matchId, peerId]);
 
+  // Ошибку загрузки сообщений нельзя оставлять необработанным промисом:
+  // тогда экран молча показывает пустую переписку без объяснения.
   useEffect(() => {
-    loadMessages();
+    loadMessages().catch((e) => log.warn('Ошибка загрузки переписки:', e));
   }, [loadMessages]);
 
   // Realtime: подписка на новые сообщения в этом совпадении
@@ -541,7 +546,11 @@ export default function Chat() {
             bubble = (
               <View style={[styles.bubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}>
                 <Text style={isMine ? styles.bubbleTextMine : styles.bubbleTextTheirs}>
-                  {item.content}
+                  {/* content — колонка text, но после сбоя расшифровки или
+                      неожиданного ответа сервера там может оказаться не
+                      строка. <Text> с объектом роняет дерево React, и вся
+                      страница становится пустой. */}
+                  {typeof item.content === 'string' ? item.content : ''}
                 </Text>
               </View>
             );
