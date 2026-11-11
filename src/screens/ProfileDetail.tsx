@@ -1,6 +1,6 @@
 // src/screens/ProfileDetail.tsx
 import React, { useCallback, useEffect, useState } from 'react';
-import type { RootNavigation } from '../lib/navigation';
+import type { RootNavigation, RootParamList } from '../lib/navigation';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import type { RouteProp } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import LoadError from '../ui/LoadError';
 import { getMyCoordinates } from '../lib/location';
@@ -37,8 +38,8 @@ const screenWidth = Dimensions.get('window').width;
 
 export default function ProfileDetail() {
   const navigation = useNavigation<RootNavigation>();
-  const route = useRoute<any>();
-  const { profileId } = route.params;
+  const route = useRoute<RouteProp<RootParamList, 'ProfileDetail'>>();
+  const { profileId, fromChat } = route.params;
 
   const [profile, setProfile] = useState<FullProfile | null>(null);
   const [distanceKm, setDistanceKm] = useState<number | undefined>(undefined);
@@ -181,14 +182,24 @@ export default function ProfileDetail() {
         {matchInfo?.status === 'matched' && (
           <TouchableOpacity
             style={styles.messageButton}
-            onPress={() =>
+            onPress={() => {
+              // Анкета открыта из переписки: Chat уже лежит в стеке под ней.
+              // В React Navigation 7 navigate('Chat') не возвращает к уже
+              // открытому чату, а кладёт второй Chat поверх анкеты — на Android
+              // такой переход из-под headerRight ронял приложение. Поэтому
+              // просто возвращаемся назад, к тому же самому диалогу.
+              if (fromChat && navigation.canGoBack()) {
+                navigation.goBack();
+                return;
+              }
+
               navigation.navigate('Chat', {
                 matchId: matchInfo.matchId,
                 otherUserId: profile.id,
                 otherName: profile.display_name,
                 otherAge: age,
-              })
-            }
+              });
+            }}
           >
             <Text style={styles.likeButtonText}>Написать сообщение</Text>
           </TouchableOpacity>

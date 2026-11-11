@@ -403,7 +403,18 @@ export default function App() {
           component={ProfileDetail}
           options={{ title: 'Анкета', headerStyle: { backgroundColor: colors.bg }, headerTintColor: colors.textPrimary }}
         />
-        <Stack.Screen name="Chat" component={Chat} options={{ title: 'Чат' }} />
+        {/* getId по matchId: один и тот же диалог не может оказаться в стеке
+            дважды. В React Navigation 7 navigate() по умолчанию не возвращает к
+            уже открытому экрану, а кладёт второй Chat поверх — из-за этого при
+            переходе «чат → анкета → написать сообщение» в стеке оказывались два
+            Chat на один match_id, и приложение падало. С getId повторный
+            navigate к тому же диалогу просто возвращает к открытому чату. */}
+        <Stack.Screen
+          name="Chat"
+          component={Chat}
+          getId={({ params }) => (params as RootParamList['Chat'] | undefined)?.matchId}
+          options={{ title: 'Чат' }}
+        />
         <Stack.Screen
           name="Settings"
           component={Settings}

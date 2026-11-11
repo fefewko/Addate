@@ -64,7 +64,9 @@ export default function Chat() {
       headerRight: peerProfileId
         ? () => (
             <TouchableOpacity
-              onPress={() => navigation.navigate('ProfileDetail', { profileId: peerProfileId })}
+              onPress={() =>
+                navigation.navigate('ProfileDetail', { profileId: peerProfileId, fromChat: true })
+              }
               accessibilityRole="button"
               accessibilityLabel="Открыть анкету"
               style={{ paddingHorizontal: 12, paddingVertical: 4 }}

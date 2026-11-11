@@ -25,7 +25,10 @@ export type RootParamList = {
   ProfileSetup: undefined;
   ModerationPending: undefined;
   Tabs: NavigatorScreenParams<TabParamList> | undefined;
-  ProfileDetail: { profileId: string };
+  // fromChat — анкета открыта из шапки переписки, то есть Chat уже лежит в
+  // стеке под ней. Нужен, чтобы «Написать сообщение» возвращало к открытому
+  // чату, а не открывало второй Chat поверх первого.
+  ProfileDetail: { profileId: string; fromChat?: boolean };
   // Поля nullable, потому что приходят прямо из базы: display_name и дата
   // рождения у собеседника могут быть null.
   Chat: {
