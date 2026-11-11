@@ -15,6 +15,13 @@ BEGIN;
 
 ALTER TABLE public.push_tokens ENABLE ROW LEVEL SECURITY;
 
+-- На случай, если таблицу создавали вручную и в ней нет служебных колонок:
+-- upsert из приложения передаёт updated_at, а id должен заполняться сам.
+ALTER TABLE public.push_tokens
+  ADD COLUMN IF NOT EXISTS updated_at timestamp with time zone DEFAULT now();
+ALTER TABLE public.push_tokens
+  ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
 -- Политика на все команды сразу. Имя заменяем на понятное, старые убираем,
 -- чтобы не оставлять противоречивых правил.
 DROP POLICY IF EXISTS "Управление своими push-токенами" ON public.push_tokens;
@@ -32,6 +39,7 @@ COMMENT ON POLICY "Свои push-токены" ON public.push_tokens IS
   'приложение не может сохранить токен устройства, и уведомления не приходят.';
 
 -- Гранты на уровне таблицы: RLS ограничивает строки, но не заменяет гранты.
+GRANT USAGE ON SCHEMA public TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.push_tokens TO authenticated;
 
 COMMIT;
