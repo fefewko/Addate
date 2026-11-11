@@ -2,7 +2,7 @@
   "expo": {
     "name": "ADDate",
     "slug": "ADDate",
-    "version": "0.0.25",
+    "version": "0.0.26",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "addate",

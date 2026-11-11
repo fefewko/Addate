@@ -1,7 +1,7 @@
 // src/screens/Settings.tsx
 import React, { useCallback, useState } from 'react';
 import type { RootNavigation } from '../lib/navigation';
-import { View, Text, TouchableOpacity, StyleSheet, Switch, ScrollView, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Switch, ScrollView } from 'react-native';
 import { appAlert } from '../lib/alert';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
@@ -16,14 +16,6 @@ import {
   unregisterPushToken,
 } from '../lib/pushNotifications';
 import { colors } from '../lib/theme';
-
-const DOCS = [
-  ['Пользовательское соглашение', 'https://addate.ru/terms.html'],
-  ['Правила сообщества', 'https://addate.ru/rules.html'],
-  ['Политика конфиденциальности', 'https://addate.ru/privacy.html'],
-  ['Согласие на обработку ПД', 'https://addate.ru/personal-data-consent.html'],
-  ['Удаление аккаунта', 'https://addate.ru/delete-account.html'],
-] as const;
 
 export default function Settings() {
   const navigation = useNavigation<RootNavigation>();
@@ -90,8 +82,6 @@ export default function Settings() {
     navigation.reset({ index: 0, routes: [{ name: 'SignIn' }] });
   }
 
-  function openDoc(url: string) { Linking.openURL(url).catch(() => appAlert.alert('Ошибка', 'Не удалось открыть документ.')); }
-
   async function handleDeleteAccount() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { appAlert.alert('Нужно войти', 'Войдите в аккаунт, чтобы удалить его.'); return; }
@@ -127,6 +117,13 @@ export default function Settings() {
             Выключение снимает push-токен этого устройства. Разрешение операционной
             системы при этом остаётся — его можно вернуть тумблером.
           </Text>
+          <TouchableOpacity style={styles.actionRow} onPress={() => navigation.navigate('PushDiagnostics')}>
+            <Text style={styles.actionText}>Проверить, доходят ли уведомления</Text>
+          </TouchableOpacity>
+          <Text style={styles.hint}>
+            Пошаговая проверка: разрешение, токен устройства, отправка через Expo и тестовое
+            уведомление.
+          </Text>
         </>
       )}
 
@@ -135,13 +132,16 @@ export default function Settings() {
       <Text style={styles.hint}>Используется для подбора анкет и расчёта расстояния.</Text>
 
       <Text style={styles.sectionTitle}>Документы</Text>
-      {DOCS.map(([label, url]) => <TouchableOpacity key={url} style={styles.actionRow} onPress={() => openDoc(url)}><Text style={styles.actionText}>{label}</Text></TouchableOpacity>)}
+      <TouchableOpacity style={styles.actionRow} onPress={() => navigation.navigate('Documents')}>
+        <Text style={styles.actionText}>Документы и согласия</Text>
+      </TouchableOpacity>
 
       <Text style={styles.sectionTitle}>О приложении</Text>
       <View style={styles.row}><Text style={styles.rowLabel}>Версия</Text><Text style={styles.rowValue}>{Constants.expoConfig?.version || '—'}</Text></View>
       <TouchableOpacity style={styles.actionRow} onPress={() => openSupportChat(navigation)}><Text style={styles.actionText}>Написать в поддержку</Text></TouchableOpacity>
 
       <Text style={styles.sectionTitle}>Аккаунт</Text>
+      <TouchableOpacity style={styles.actionRow} onPress={() => navigation.navigate('ChangePassword')}><Text style={styles.actionText}>Сменить пароль</Text></TouchableOpacity>
       <TouchableOpacity style={styles.actionRow} onPress={() => navigation.navigate('BlockedUsers')}><Text style={styles.actionText}>Заблокированные пользователи</Text></TouchableOpacity>
       <TouchableOpacity style={styles.actionRow} onPress={handleSignOut}><Text style={styles.signOutText}>Выйти из аккаунта</Text></TouchableOpacity>
 

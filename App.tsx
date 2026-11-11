@@ -29,6 +29,9 @@ import ChatList from './src/screens/ChatList';
 import Chat from './src/screens/Chat';
 import Profile from './src/screens/Profile';
 import Settings from './src/screens/Settings';
+import Documents from './src/screens/Documents';
+import ChangePassword from './src/screens/ChangePassword';
+import PushDiagnostics from './src/screens/PushDiagnostics';
 import BlockedUsers from './src/screens/BlockedUsers';
 import IncomingLikes from './src/screens/IncomingLikes';
 import ProfileDetail from './src/screens/ProfileDetail';
@@ -407,6 +410,21 @@ export default function App() {
           name="BlockedUsers"
           component={BlockedUsers}
           options={{ title: 'Заблокированные', headerStyle: { backgroundColor: colors.bg }, headerTintColor: colors.textPrimary }}
+        />
+        <Stack.Screen
+          name="Documents"
+          component={Documents}
+          options={{ title: 'Документы', headerStyle: { backgroundColor: colors.bg }, headerTintColor: colors.textPrimary }}
+        />
+        <Stack.Screen
+          name="ChangePassword"
+          component={ChangePassword}
+          options={{ title: 'Смена пароля', headerStyle: { backgroundColor: colors.bg }, headerTintColor: colors.textPrimary }}
+        />
+        <Stack.Screen
+          name="PushDiagnostics"
+          component={PushDiagnostics}
+          options={{ title: 'Проверка уведомлений', headerStyle: { backgroundColor: colors.bg }, headerTintColor: colors.textPrimary }}
         />
         <Stack.Screen
           name="IncomingLikes"

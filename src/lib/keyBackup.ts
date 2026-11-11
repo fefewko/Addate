@@ -434,6 +434,16 @@ export async function syncKeyBackupWithCache(userId: string): Promise<void> {
 
   const publicKeyB64 = publicKeyFromSecretKey(privateKey);
 
+  // Не перезаписываем копию ключом, который не опубликован в профиле: значит,
+  // на этом устройстве рабочий ключ ещё не готов (конфликт после переустановки).
+  try {
+    const published = await getPublicKey(userId);
+    if (!published || bytesToBase64(published) !== publicKeyB64) return;
+  } catch (e) {
+    log.warn('Резервная копия ключа: не удалось проверить profiles.public_key:', e);
+    return;
+  }
+
   const meta = parsePayload(await fetchBackupRow(userId));
   if (meta?.publicKey === publicKeyB64) {
     return; // копия уже соответствует ключу на устройстве
@@ -452,6 +462,28 @@ export async function syncKeyBackupWithCache(userId: string): Promise<void> {
     ct: bytesToBase64(ciphertext),
     publicKey: publicKeyB64,
   });
+}
+
+/**
+ * Перешифровывает копию новым паролем. Нужно после смены пароля: копия
+ * привязана к паролю, и со старым она бы не открылась после переустановки.
+ *
+ * Возвращает false, если локального ключа нет (тогда перешифровывать нечего).
+ */
+export async function reencryptKeyBackup(userId: string, password: string): Promise<boolean> {
+  const privateKey = await getLocalPrivateKey(userId);
+  if (!privateKey) return false;
+
+  const publicKeyB64 = publicKeyFromSecretKey(privateKey);
+
+  // Копируем только рабочий ключ — тот, что опубликован в профиле. Иначе при
+  // конфликте устройств (в профиле ключ другого телефона) мы бы записали в
+  // резервную копию нерабочий ключ и при следующем входе подменили им профиль.
+  const published = await getPublicKey(userId);
+  if (!published || bytesToBase64(published) !== publicKeyB64) return false;
+
+  await createBackup(userId, password, privateKey, publicKeyB64);
+  return true;
 }
 
 /**

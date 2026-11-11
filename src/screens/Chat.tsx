@@ -51,8 +51,28 @@ export default function Chat() {
 
   useEffect(() => {
     const title = otherAge ? `${otherName || 'Чат'}, ${otherAge}` : otherName || 'Чат';
-    navigation.setOptions({ title });
-  }, [navigation, otherName, otherAge]);
+
+    // Переход в анкету собеседника прямо из переписки: тап по иконке в шапке.
+    // peerId может прийти позже (при открытии по ссылке chat/:matchId), поэтому
+    // эффект зависит от него.
+    // У чата поддержки анкеты нет — иконку не показываем.
+    const peerProfileId = isSupport ? null : peerId ?? otherUserId ?? null;
+    navigation.setOptions({
+      title,
+      headerRight: peerProfileId
+        ? () => (
+            <TouchableOpacity
+              onPress={() => navigation.navigate('ProfileDetail', { profileId: peerProfileId })}
+              accessibilityRole="button"
+              accessibilityLabel="Открыть анкету"
+              style={{ paddingHorizontal: 12, paddingVertical: 4 }}
+            >
+              <Ionicons name="person-circle-outline" size={26} color={colors.textPrimary} />
+            </TouchableOpacity>
+          )
+        : undefined,
+    });
+  }, [navigation, otherName, otherAge, peerId, otherUserId, isSupport]);
 
   useEffect(() => {
     // При входе по ссылке chat/:matchId в параметрах есть только matchId,
