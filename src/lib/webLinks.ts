@@ -72,7 +72,6 @@ const WEB_PATHS = {
   settings: 'settings',
   documents: 'documents',
   changePassword: 'change-password',
-  pushDiagnostics: 'push-diagnostics',
   blockedUsers: 'blocked',
   incomingLikes: 'likes',
 } as const;
@@ -92,7 +91,6 @@ function screensForWeb() {
     Settings: WEB_PATHS.settings,
     Documents: WEB_PATHS.documents,
     ChangePassword: WEB_PATHS.changePassword,
-    PushDiagnostics: WEB_PATHS.pushDiagnostics,
     BlockedUsers: WEB_PATHS.blockedUsers,
     IncomingLikes: WEB_PATHS.incomingLikes,
     Tabs: {
