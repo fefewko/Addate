@@ -18,7 +18,7 @@ export async function openSupportChat(navigation: any) {
   }
 
   const { data: admin } = await supabase
-    .from('profiles')
+    .from('profile_cards')
     .select('id, display_name')
     .eq('is_admin', true)
     .limit(1)

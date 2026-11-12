@@ -10,7 +10,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '../lib/supabase';
 import { getMyCoordinates } from '../lib/location';
 import { likeProfile } from '../lib/matches';
-import { SOBRIETY_LABEL, SUBSTANCE_LABEL, SobrietyStatus, calcAge, isOnline, formatDistance } from '../lib/profileDisplay';
+import { SOBRIETY_LABEL, SUBSTANCE_LABEL, SobrietyStatus, calcAge, formatDistance } from '../lib/profileDisplay';
 import { colors } from '../lib/theme';
 
 type Profile = {
@@ -22,7 +22,10 @@ type Profile = {
   sobriety_status: SobrietyStatus;
   substance_type: string[] | null;
   photo_url: string | null;
-  last_seen_at: string | null;
+  photos_visible: boolean;
+  // null — пользователь скрыл онлайн-статус, точка not rendered.
+  is_online: boolean | null;
+  last_active_at: string | null;
   distanceKm?: number;
 };
 
@@ -283,7 +286,9 @@ export default function Feed() {
           <Image source={{ uri: current.photo_url }} style={styles.photo} />
         ) : (
           <View style={[styles.photo, styles.photoPlaceholder]}>
-            <Text style={styles.photoPlaceholderText}>Нет фото</Text>
+            <Text style={styles.photoPlaceholderText}>
+              {current.photos_visible ? 'Нет фото' : 'Фото скрыто'}
+            </Text>
           </View>
         )}
       </TouchableOpacity>
@@ -294,9 +299,14 @@ export default function Feed() {
             {current.display_name || 'Без имени'}
             {age ? `, ${age}` : ''}
           </Text>
-          <View
-            style={[styles.onlineDot, { backgroundColor: isOnline(current.last_seen_at) ? colors.success : colors.offline }]}
-          />
+          {current.is_online !== null && (
+            <View
+              style={[
+                styles.onlineDot,
+                { backgroundColor: current.is_online ? colors.success : colors.offline },
+              ]}
+            />
+          )}
         </View>
         {current.substance_type && current.substance_type.length > 0 && (
           <View style={styles.tagsRow}>

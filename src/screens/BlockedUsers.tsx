@@ -47,19 +47,23 @@ export default function BlockedUsers() {
 
     const ids = blocks.map((b) => b.blocked_id);
     const { data: profiles } = await supabase
-      .from('profiles')
-      .select('id, display_name, photo_url')
+      .from('profile_cards')
+      .select('id, display_name, photo_url, profile_hidden')
       .in('id', ids);
 
     const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
 
     setItems(
-      blocks.map((b) => ({
-        blockId: b.id,
-        userId: b.blocked_id,
-        displayName: profileMap.get(b.blocked_id)?.display_name || 'Без имени',
-        photoUrl: profileMap.get(b.blocked_id)?.photo_url || null,
-      }))
+      blocks.map((b) => {
+        const card = profileMap.get(b.blocked_id);
+        const hidden = card?.profile_hidden === true;
+        return {
+          blockId: b.id,
+          userId: b.blocked_id,
+          displayName: hidden ? 'Скрытая анкета' : card?.display_name || 'Без имени',
+          photoUrl: hidden ? null : card?.photo_url || null,
+        };
+      })
     );
     setLoading(false);
   }, []);

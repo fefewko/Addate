@@ -21,6 +21,20 @@ type IncomingLike = {
   bio: string | null;
   sobrietyStatus: SobrietyStatus;
   photoUrl: string | null;
+  photosVisible: boolean;
+  profileHidden: boolean;
+};
+
+type ProfileCard = {
+  id: string;
+  display_name: string | null;
+  birth_date: string | null;
+  city: string | null;
+  bio: string | null;
+  sobriety_status: SobrietyStatus | null;
+  photo_url: string | null;
+  photos_visible: boolean;
+  profile_hidden: boolean;
 };
 
 export default function IncomingLikes() {
@@ -59,10 +73,7 @@ export default function IncomingLikes() {
 
     const { data, error } = await supabase
       .from('matches')
-      .select(
-        `id, user_a,
-         profile:profiles!matches_user_a_fkey (display_name, birth_date, city, bio, sobriety_status, photo_url)`
-      )
+      .select('id, user_a')
       .eq('user_b', user.id)
       .eq('status', 'pending')
       .order('created_at', { ascending: false });
@@ -75,18 +86,44 @@ export default function IncomingLikes() {
       return;
     }
 
-    const mapped: IncomingLike[] = ((data as any[]) || [])
-      .filter((m) => !blockedIds.has(m.user_a))
-      .map((m) => ({
+    const rows = ((data as { id: string; user_a: string }[]) || []).filter(
+      (m) => !blockedIds.has(m.user_a)
+    );
+
+    // Анкеты лайкнувших читаем из profile_cards: сервер уже применил их
+    // настройки приватности и не отдаст скрытые поля.
+    const cards = new Map<string, ProfileCard>();
+    const likerIds = Array.from(new Set(rows.map((m) => m.user_a)));
+    if (likerIds.length > 0) {
+      const { data: cardRows } = await supabase
+        .from('profile_cards')
+        .select(
+          'id, display_name, birth_date, city, bio, sobriety_status, photo_url, photos_visible, profile_hidden'
+        )
+        .in('id', likerIds);
+
+      (cardRows || []).forEach((row) => {
+        const card = row as ProfileCard;
+        cards.set(card.id, card);
+      });
+    }
+
+    const mapped: IncomingLike[] = rows.map((m) => {
+      const card = cards.get(m.user_a);
+      const hidden = card?.profile_hidden === true;
+      return {
         matchId: m.id,
         userId: m.user_a,
-        displayName: m.profile?.display_name ?? null,
-        birthDate: m.profile?.birth_date ?? null,
-        city: m.profile?.city ?? null,
-        bio: m.profile?.bio ?? null,
-        sobrietyStatus: m.profile?.sobriety_status ?? 'ne_ukazano',
-        photoUrl: m.profile?.photo_url ?? null,
-      }));
+        displayName: hidden ? 'Скрытая анкета' : card?.display_name ?? null,
+        birthDate: hidden ? null : card?.birth_date ?? null,
+        city: hidden ? null : card?.city ?? null,
+        bio: hidden ? null : card?.bio ?? null,
+        sobrietyStatus: hidden ? 'ne_ukazano' : card?.sobriety_status ?? 'ne_ukazano',
+        photoUrl: hidden ? null : card?.photo_url ?? null,
+        photosVisible: hidden ? false : card?.photos_visible ?? false,
+        profileHidden: hidden,
+      };
+    });
 
     setItems(mapped);
   }, []);
@@ -163,7 +200,9 @@ export default function IncomingLikes() {
               <Image source={{ uri: item.photoUrl }} style={styles.photo} />
             ) : (
               <View style={[styles.photo, styles.photoPlaceholder]}>
-                <Text style={styles.photoPlaceholderText}>Нет фото</Text>
+                <Text style={styles.photoPlaceholderText}>
+                  {item.photosVisible ? 'Нет фото' : 'Фото скрыто'}
+                </Text>
               </View>
             )}
 
@@ -173,7 +212,9 @@ export default function IncomingLikes() {
                 {age ? `, ${age}` : ''}
               </Text>
               {item.city && <Text style={styles.city}>{item.city}</Text>}
-              <Text style={styles.sobriety}>{SOBRIETY_LABEL[item.sobrietyStatus]}</Text>
+              {!item.profileHidden && (
+                <Text style={styles.sobriety}>{SOBRIETY_LABEL[item.sobrietyStatus]}</Text>
+              )}
               {item.bio && <Text style={styles.bio}>{item.bio}</Text>}
             </View>
 

@@ -16,11 +16,12 @@ import type { RouteProp } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import LoadError from '../ui/LoadError';
 import { getMyCoordinates } from '../lib/location';
-import { SOBRIETY_LABEL, SUBSTANCE_LABEL, SobrietyStatus, calcAge, isOnline } from '../lib/profileDisplay';
+import { SOBRIETY_LABEL, SUBSTANCE_LABEL, SobrietyStatus, calcAge, formatDate, formatLastActive } from '../lib/profileDisplay';
 import { colors } from '../lib/theme';
 
 type FullProfile = {
   id: string;
+  is_own: boolean;
   display_name: string | null;
   birth_date: string | null;
   city: string | null;
@@ -28,10 +29,14 @@ type FullProfile = {
   height_cm: number | null;
   weight_kg: number | null;
   sobriety_status: SobrietyStatus;
+  sobriety_since: string | null;
   substance_type: string[] | null;
   photo_url: string | null;
   additional_photos: string[] | null;
-  last_seen_at: string | null;
+  is_online: boolean | null;
+  last_active_at: string | null;
+  photos_visible: boolean;
+  profile_hidden: boolean;
 };
 
 const screenWidth = Dimensions.get('window').width;
@@ -65,14 +70,20 @@ export default function ProfileDetail() {
     }
 
     const { data, error } = await supabase
-      .from('profiles')
+      .from('profile_cards')
       .select(
-        'id, display_name, birth_date, city, bio, height_cm, weight_kg, sobriety_status, substance_type, photo_url, additional_photos, last_seen_at'
+        'id, is_own, display_name, birth_date, city, bio, height_cm, weight_kg, sobriety_status, sobriety_since, substance_type, photo_url, additional_photos, is_online, last_active_at, photos_visible, profile_hidden'
       )
       .eq('id', profileId)
       .maybeSingle();
 
-    if (!error && data) setProfile(data as FullProfile);
+    if (error) {
+      setLoading(false);
+      setLoadError('Не удалось загрузить анкету: ' + error.message);
+      return;
+    }
+
+    if (data) setProfile(data as FullProfile);
 
     // Проверяем совпадение в ОБЕ стороны — иначе не узнаем про matched,
     // если собеседник лайкнул первым.
@@ -120,9 +131,15 @@ export default function ProfileDetail() {
     );
   }
 
-  const age = calcAge(profile.birth_date);
-  const online = isOnline(profile.last_seen_at);
-  const allPhotos = [profile.photo_url, ...(profile.additional_photos || [])].filter(Boolean) as string[];
+  const hidden = profile.profile_hidden && !profile.is_own;
+  const age = hidden ? null : calcAge(profile.birth_date);
+  const online = hidden ? null : profile.is_online;
+  const lastActive = hidden ? null : formatLastActive(profile.last_active_at);
+  const sobrietySince = hidden ? null : formatDate(profile.sobriety_since);
+  const allPhotos = hidden
+    ? []
+    : ([profile.photo_url, ...(profile.additional_photos || [])].filter(Boolean) as string[]);
+  const photosVisible = !hidden && profile.photos_visible;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
@@ -134,30 +151,34 @@ export default function ProfileDetail() {
         </ScrollView>
       ) : (
         <View style={[styles.mainPhoto, styles.photoPlaceholder, { width: screenWidth }]}>
-          <Text style={styles.photoPlaceholderText}>Нет фото</Text>
+          <Text style={styles.photoPlaceholderText}>
+            {photosVisible ? 'Нет фото' : 'Фото скрыто'}
+          </Text>
         </View>
       )}
 
       <View style={styles.body}>
         <View style={styles.nameRow}>
           <Text style={styles.name}>
-            {profile.display_name || 'Без имени'}
+            {hidden ? 'Скрытая анкета' : profile.display_name || 'Без имени'}
             {age ? `, ${age}` : ''}
           </Text>
-          <View style={styles.onlineBadge}>
-            <View style={[styles.onlineDot, { backgroundColor: online ? colors.success : colors.textFaint }]} />
-            <Text style={styles.onlineText}>{online ? 'В сети' : 'Не в сети'}</Text>
-          </View>
+          {!hidden && online !== null && (
+            <View style={styles.onlineBadge}>
+              <View style={[styles.onlineDot, { backgroundColor: online ? colors.success : colors.textFaint }]} />
+              <Text style={styles.onlineText}>{online ? 'В сети' : 'Не в сети'}</Text>
+            </View>
+          )}
         </View>
 
-        {profile.city && <Text style={styles.infoLine}>{profile.city}</Text>}
-        {distanceKm !== undefined && (
+        {!hidden && profile.city && <Text style={styles.infoLine}>{profile.city}</Text>}
+        {!hidden && distanceKm !== undefined && (
           <Text style={styles.infoLine}>
             {distanceKm < 1 ? 'Меньше 1 км от вас' : `~${Math.round(distanceKm)} км от вас`}
           </Text>
         )}
 
-        {(profile.height_cm || profile.weight_kg) && (
+        {!hidden && (profile.height_cm || profile.weight_kg) && (
           <Text style={styles.infoLine}>
             {profile.height_cm ? `${profile.height_cm} см` : ''}
             {profile.height_cm && profile.weight_kg ? ' · ' : ''}
@@ -165,9 +186,13 @@ export default function ProfileDetail() {
           </Text>
         )}
 
-        <Text style={styles.sobriety}>{SOBRIETY_LABEL[profile.sobriety_status]}</Text>
+        {!hidden && <Text style={styles.sobriety}>{SOBRIETY_LABEL[profile.sobriety_status]}</Text>}
 
-        {profile.substance_type && profile.substance_type.length > 0 && (
+        {sobrietySince && (
+          <Text style={styles.infoLine}>В трезвости с {sobrietySince}</Text>
+        )}
+
+        {!hidden && profile.substance_type && profile.substance_type.length > 0 && (
           <View style={styles.tagsRow}>
             {profile.substance_type.map((s) => (
               <View key={s} style={styles.tag}>
@@ -177,7 +202,18 @@ export default function ProfileDetail() {
           </View>
         )}
 
-        {profile.bio && <Text style={styles.bio}>{profile.bio}</Text>}
+        {!hidden && profile.bio && <Text style={styles.bio}>{profile.bio}</Text>}
+
+        {lastActive && (
+          <Text style={styles.lastActive}>Последняя активность: {lastActive}</Text>
+        )}
+
+        {hidden && (
+          <Text style={styles.hiddenNotice}>
+            Пользователь полностью скрыл свою анкету. Видны только имя чата и
+            переписка, которую вы уже начали.
+          </Text>
+        )}
 
         {matchInfo?.status === 'matched' && (
           <TouchableOpacity
@@ -229,6 +265,14 @@ const styles = StyleSheet.create({
   tag: { backgroundColor: colors.surface, borderRadius: 14, paddingVertical: 6, paddingHorizontal: 12 },
   tagText: { color: colors.textPrimary, fontSize: 13 },
   bio: { fontSize: 15, color: colors.textPrimary, lineHeight: 22, marginBottom: 24 },
+  lastActive: { fontSize: 12, color: colors.textFaint, marginBottom: 20 },
+  hiddenNotice: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    lineHeight: 20,
+    marginTop: 8,
+    marginBottom: 24,
+  },
   likeButtonText: { color: colors.white, fontSize: 16, fontWeight: '600' },
   messageButton: { backgroundColor: colors.success, borderRadius: 10, padding: 16, alignItems: 'center' },
 });

@@ -120,6 +120,15 @@ export default function Settings() {
         </>
       )}
 
+      <Text style={styles.sectionTitle}>Приватность</Text>
+      <TouchableOpacity style={styles.actionRow} onPress={() => navigation.navigate('Privacy')}>
+        <Text style={styles.actionText}>Моя приватность</Text>
+      </TouchableOpacity>
+      <Text style={styles.hint}>
+        Видимость анкеты, возраст, город, фотографии, онлайн-статус и другие
+        чувствительные поля.
+      </Text>
+
       <Text style={styles.sectionTitle}>Геопозиция</Text>
       <TouchableOpacity style={styles.actionRow} onPress={handleUpdateLocation} disabled={updatingLocation}><Text style={styles.actionText}>{updatingLocation ? 'Обновляем…' : 'Обновить геопозицию вручную'}</Text></TouchableOpacity>
       <Text style={styles.hint}>Используется для подбора анкет и расчёта расстояния.</Text>

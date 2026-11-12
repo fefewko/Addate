@@ -20,6 +20,17 @@ const screenWidth = Dimensions.get('window').width;
 
 const MAX_ADDITIONAL_PHOTOS = 4;
 
+type MyProfileRow = {
+  city: string | null;
+  height_cm: number | null;
+  weight_kg: number | null;
+  bio: string | null;
+  sobriety_status: SobrietyStatus | null;
+  substance_type: string[] | null;
+  photo_url: string | null;
+  additional_photos: string[] | null;
+};
+
 export default function Profile() {
   const navigation = useNavigation<RootNavigation>();
 
@@ -69,11 +80,7 @@ export default function Profile() {
     setEmail(user.email || '');
 
     const { data, error } = await supabase
-      .from('profiles')
-      .select(
-        'city, height_cm, weight_kg, bio, sobriety_status, substance_type, photo_url, additional_photos'
-      )
-      .eq('id', user.id)
+      .rpc('my_profile')
       .maybeSingle();
 
     setLoading(false);
@@ -82,27 +89,29 @@ export default function Profile() {
       setLoadError('Не удалось загрузить профиль: ' + error.message);
       return;
     }
-    if (!data) {
+
+    const profile = data as MyProfileRow | null;
+    if (!profile) {
       setLoadError('Анкета не найдена.');
       return;
     }
 
-    setCity(data.city || '');
-    setHeightCm(data.height_cm ? String(data.height_cm) : '');
-    setWeightKg(data.weight_kg ? String(data.weight_kg) : '');
-    setBio(data.bio || '');
-    setSobrietyStatus(data.sobriety_status || 'ne_ukazano');
-    setSubstances(data.substance_type || []);
-    setPhotoUrl(data.photo_url);
-    setAdditionalPhotos(data.additional_photos || []);
+    setCity(profile.city || '');
+    setHeightCm(profile.height_cm ? String(profile.height_cm) : '');
+    setWeightKg(profile.weight_kg ? String(profile.weight_kg) : '');
+    setBio(profile.bio || '');
+    setSobrietyStatus(profile.sobriety_status || 'ne_ukazano');
+    setSubstances(profile.substance_type || []);
+    setPhotoUrl(profile.photo_url);
+    setAdditionalPhotos(profile.additional_photos || []);
 
     setOriginal({
-      city: data.city || '',
-      heightCm: data.height_cm ? String(data.height_cm) : '',
-      weightKg: data.weight_kg ? String(data.weight_kg) : '',
-      bio: data.bio || '',
-      sobrietyStatus: data.sobriety_status || 'ne_ukazano',
-      substances: data.substance_type || [],
+      city: profile.city || '',
+      heightCm: profile.height_cm ? String(profile.height_cm) : '',
+      weightKg: profile.weight_kg ? String(profile.weight_kg) : '',
+      bio: profile.bio || '',
+      sobrietyStatus: profile.sobriety_status || 'ne_ukazano',
+      substances: profile.substance_type || [],
     });
   }, []);
 

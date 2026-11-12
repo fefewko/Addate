@@ -98,15 +98,16 @@ export default function Chat() {
 
     let cancelled = false;
     supabase
-      .from('profiles')
-      .select('display_name, photo_url, is_admin')
+      .from('profile_cards')
+      .select('display_name, photo_url, is_admin, profile_hidden')
       .eq('id', peerId)
       .maybeSingle()
       .then(({ data }) => {
         if (cancelled) return;
+        const hidden = data?.profile_hidden === true;
         setIsSupport(!!data?.is_admin);
-        setPeerName(data?.display_name ?? null);
-        setPeerPhoto(data?.photo_url ?? null);
+        setPeerName(hidden ? 'Скрытая анкета' : data?.display_name ?? null);
+        setPeerPhoto(hidden ? null : data?.photo_url ?? null);
       });
 
     return () => {

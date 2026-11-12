@@ -38,6 +38,7 @@ export type RootParamList = {
     otherAge?: number | null;
   };
   Settings: undefined;
+  Privacy: undefined;
   Documents: undefined;
   ChangePassword: undefined;
   BlockedUsers: undefined;

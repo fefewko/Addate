@@ -25,15 +25,15 @@ export async function resolveInitialRoute(): Promise<InitialRoute> {
     return 'SignIn';
   }
 
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('moderation_status, display_name')
-    .eq('id', session.user.id)
+  const { data, error: profileError } = await supabase
+    .rpc('my_profile')
     .maybeSingle();
 
   if (profileError) {
     throw new Error('Не удалось загрузить анкету: ' + profileError.message);
   }
+
+  const profile = data as { display_name: string | null; moderation_status: string | null } | null;
 
   if (!profile || !profile.display_name) {
     return 'ProfileSetup';

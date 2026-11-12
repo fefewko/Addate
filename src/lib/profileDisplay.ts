@@ -50,3 +50,37 @@ export function formatDistance(km: number | undefined): string | null {
   if (km < 1) return 'Меньше 1 км от вас';
   return `~${Math.round(km)} км от вас`;
 }
+
+// Последняя активность приходит с сервера уже с учётом настройки приватности:
+// если пользователь её скрыл, поля просто нет. Здесь только переводим
+// timestamp в понятную подпись.
+export function formatLastActive(value: string | null): string | null {
+  if (!value) return null;
+
+  const time = new Date(value).getTime();
+  if (!Number.isFinite(time)) return null;
+
+  const diff = Date.now() - time;
+  if (diff < 0) return 'только что';
+  if (diff < 60_000) return 'только что';
+
+  const minutes = Math.floor(diff / 60_000);
+  if (minutes < 60) return `${minutes} мин назад`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} ч назад`;
+
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'вчера';
+  if (days < 30) return `${days} дн назад`;
+
+  return new Date(value).toLocaleDateString('ru-RU');
+}
+
+// Дата без времени — для даты начала трезвости.
+export function formatDate(value: string | null): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString('ru-RU');
+}

@@ -15,7 +15,7 @@ import { getMyCoordinates } from '../lib/location';
 import { decryptText, encryptText, getLocalPrivateKey, getPublicKey, prepareSendSession, publicKeyToBase64 } from '../lib/e2ee';
 import { offerKeyReset } from '../lib/e2eeReset';
 import LoadError from '../ui/LoadError';
-import { SOBRIETY_LABEL, SOBRIETY_OPTIONS, SUBSTANCE_OPTIONS, SobrietyStatus, calcAge, isOnline, formatDistance } from '../lib/profileDisplay';
+import { SOBRIETY_LABEL, SOBRIETY_OPTIONS, SUBSTANCE_OPTIONS, SobrietyStatus, calcAge, formatDistance } from '../lib/profileDisplay';
 import { colors } from '../lib/theme';
 
 type Profile = {
@@ -27,7 +27,9 @@ type Profile = {
   sobriety_status: SobrietyStatus;
   substance_type: string[] | null;
   photo_url: string | null;
-  last_seen_at: string | null;
+  photos_visible: boolean;
+  is_online: boolean | null;
+  last_active_at: string | null;
   distanceKm?: number;
 };
 
@@ -782,7 +784,16 @@ export default function AllUsers() {
     }
 
     const age = calcAge(p.birth_date);
-    if (age !== null && (age < filters.ageMin || age > filters.ageMax)) return false;
+    const ageFilterActive =
+      filters.ageMin !== DEFAULT_FILTERS.ageMin || filters.ageMax !== DEFAULT_FILTERS.ageMax;
+    if (ageFilterActive) {
+      // Если возраст скрыт настройками приватности, он не может участвовать
+      // в фильтре: такие анкеты не показываем, иначе фильтр по возрасту
+      // выдавал бы людей, чей возраст неизвестен.
+      if (age === null || age < filters.ageMin || age > filters.ageMax) return false;
+    } else if (age !== null && (age < filters.ageMin || age > filters.ageMax)) {
+      return false;
+    }
 
     if (filters.distance !== 'any') {
       const threshold = parseInt(filters.distance, 10);
@@ -869,7 +880,9 @@ export default function AllUsers() {
                       <Image source={{ uri: profile.photo_url }} style={styles.photo} />
                     ) : (
                       <View style={[styles.photo, styles.photoPlaceholder]}>
-                        <Text style={styles.photoPlaceholderText}>Нет фото</Text>
+                        <Text style={styles.photoPlaceholderText}>
+                          {profile.photos_visible ? 'Нет фото' : 'Фото скрыто'}
+                        </Text>
                       </View>
                     )}
 
@@ -907,16 +920,18 @@ export default function AllUsers() {
                         {profile.display_name || 'Без имени'}
                         {age ? `, ${age}` : ''}
                       </Text>
-                      <View
-                        style={[
-                          styles.onlineDot,
-                          {
-                            backgroundColor: isOnline(profile.last_seen_at)
-                              ? colors.success
-                              : colors.offline,
-                          },
-                        ]}
-                      />
+                      {profile.is_online !== null && (
+                        <View
+                          style={[
+                            styles.onlineDot,
+                            {
+                              backgroundColor: profile.is_online
+                                ? colors.success
+                                : colors.offline,
+                            },
+                          ]}
+                        />
+                      )}
                     </View>
                     {profile.city && (
                       <Text style={styles.city} numberOfLines={1}>

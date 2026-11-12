@@ -36,16 +36,16 @@ export default function SignIn() {
   // Общая логика для email- и Telegram-входа: смотрим, заполнена ли анкета
   // и прошла ли она модерацию, и ведём на нужный экран.
   async function routeAfterLogin(userId: string) {
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('moderation_status, display_name')
-      .eq('id', userId)
+    const { data, error: profileError } = await supabase
+      .rpc('my_profile')
       .maybeSingle();
 
     if (profileError) {
       setError('Не удалось загрузить профиль. Попробуйте ещё раз.');
       return;
     }
+
+    const profile = data as { display_name: string | null; moderation_status: string | null } | null;
 
     if (!profile || !profile.display_name) {
       navigation.reset({ index: 0, routes: [{ name: 'ProfileSetup' }] });

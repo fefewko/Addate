@@ -25,8 +25,17 @@ type MatchRow = {
   matched_at: string | null;
   last_message_at: string | null;
   last_message_preview: string | null;
-  user_a_profile: { display_name: string | null; photo_url: string | null; birth_date: string | null } | null;
-  user_b_profile: { display_name: string | null; photo_url: string | null; birth_date: string | null } | null;
+};
+
+// Строка из public.profile_cards: сервер уже применил настройки приватности,
+// поэтому скрытые поля приходят пустыми, а полностью скрытая анкета — с
+// profile_hidden = true.
+type ProfileCard = {
+  id: string;
+  display_name: string | null;
+  photo_url: string | null;
+  birth_date: string | null;
+  profile_hidden: boolean;
 };
 
 type MatchItem = {
@@ -149,11 +158,7 @@ export default function ChatList() {
 
     const { data, error } = await supabase
       .from('matches')
-      .select(
-        `id, user_a, user_b, matched_at, last_message_at, last_message_preview,
-         user_a_profile:profiles!matches_user_a_fkey (display_name, photo_url, birth_date),
-         user_b_profile:profiles!matches_user_b_fkey (display_name, photo_url, birth_date)`
-      )
+      .select('id, user_a, user_b, matched_at, last_message_at, last_message_preview')
       .eq('status', 'matched')
       .or(`user_a.eq.${user.id},user_b.eq.${user.id}`)
       // Порядок диалогов задаёт свежесть переписки, а не дата совпадения.
@@ -226,6 +231,21 @@ export default function ChatList() {
       new Set(rows.map((m) => (m.user_a === user.id ? m.user_b : m.user_a)))
     );
 
+    // Данные собеседников берём из profile_cards, а не из profiles: view уже
+    // учитывает настройки приватности и не отдаёт скрытые фото/возраст.
+    const otherProfiles = new Map<string, ProfileCard>();
+    if (otherIds.length > 0) {
+      const { data: cardRows } = await supabase
+        .from('profile_cards')
+        .select('id, display_name, photo_url, birth_date, profile_hidden')
+        .in('id', otherIds);
+
+      (cardRows || []).forEach((row) => {
+        const card = row as ProfileCard;
+        otherProfiles.set(card.id, card);
+      });
+    }
+
     if (otherIds.length > 0) {
       try {
         const { data: keyRows, error: keyError } = await supabase
@@ -259,13 +279,15 @@ export default function ChatList() {
 
     const mapped: MatchItem[] = rows.map((m) => {
       const iAmUserA = m.user_a === user.id;
-      const otherProfile = iAmUserA ? m.user_b_profile : m.user_a_profile;
+      const otherId = iAmUserA ? m.user_b : m.user_a;
+      const otherProfile = otherProfiles.get(otherId);
+      const hidden = otherProfile?.profile_hidden === true;
       return {
         matchId: m.id,
-        otherUserId: iAmUserA ? m.user_b : m.user_a,
-        otherName: otherProfile?.display_name || 'Без имени',
-        otherAge: calcAge(otherProfile?.birth_date ?? null),
-        otherPhoto: otherProfile?.photo_url || null,
+        otherUserId: otherId,
+        otherName: hidden ? 'Скрытая анкета' : otherProfile?.display_name || 'Без имени',
+        otherAge: hidden ? null : calcAge(otherProfile?.birth_date ?? null),
+        otherPhoto: hidden ? null : otherProfile?.photo_url || null,
         matchedAt: m.matched_at,
         lastMessageAt: m.last_message_at,
         lastMessagePreview:

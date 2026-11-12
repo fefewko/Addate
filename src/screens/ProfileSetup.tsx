@@ -26,6 +26,16 @@ import {
   type BirthDateParts,
 } from '../lib/date';
 
+type MyProfileRow = {
+  display_name: string | null;
+  birth_date: string | null;
+  city: string | null;
+  bio: string | null;
+  sobriety_status: SobrietyStatus | null;
+  substance_type: string[] | null;
+  photo_url: string | null;
+};
+
 // Разбор даты, валидация и преобразование в ISO живут в src/lib/date.ts:
 // после появления ввода на экране регистрации держать вторую копию означало
 // бы гарантированный расхожд между двумя экранами.
@@ -73,21 +83,20 @@ export default function ProfileSetup() {
       if (!user) return;
 
       const { data } = await supabase
-        .from('profiles')
-        .select('display_name, birth_date, city, bio, sobriety_status, substance_type, photo_url')
-        .eq('id', user.id)
+        .rpc('my_profile')
         .maybeSingle();
 
       if (!active || !data) return;
 
-      setDisplayName(data.display_name || '');
-      setBirth(isoToParts(data.birth_date));
-      setSavedBirthDate(data.birth_date || null);
-      setCity(data.city || '');
-      setBio(data.bio || '');
-      setSobrietyStatus((data.sobriety_status as SobrietyStatus) || 'ne_ukazano');
-      setSubstances(data.substance_type || []);
-      setSavedPhotoUrl(data.photo_url || null);
+      const profile = data as MyProfileRow;
+      setDisplayName(profile.display_name || '');
+      setBirth(isoToParts(profile.birth_date));
+      setSavedBirthDate(profile.birth_date || null);
+      setCity(profile.city || '');
+      setBio(profile.bio || '');
+      setSobrietyStatus((profile.sobriety_status as SobrietyStatus) || 'ne_ukazano');
+      setSubstances(profile.substance_type || []);
+      setSavedPhotoUrl(profile.photo_url || null);
       setEditingExisting(true);
     }
 

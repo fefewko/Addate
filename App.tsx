@@ -29,6 +29,7 @@ import ChatList from './src/screens/ChatList';
 import Chat from './src/screens/Chat';
 import Profile from './src/screens/Profile';
 import Settings from './src/screens/Settings';
+import Privacy from './src/screens/Privacy';
 import Documents from './src/screens/Documents';
 import ChangePassword from './src/screens/ChangePassword';
 import BlockedUsers from './src/screens/BlockedUsers';
@@ -465,6 +466,11 @@ export default function App() {
           name="BlockedUsers"
           component={BlockedUsers}
           options={{ title: 'Заблокированные', headerStyle: { backgroundColor: colors.bg }, headerTintColor: colors.textPrimary }}
+        />
+        <Stack.Screen
+          name="Privacy"
+          component={Privacy}
+          options={{ title: 'Моя приватность', headerStyle: { backgroundColor: colors.bg }, headerTintColor: colors.textPrimary }}
         />
         <Stack.Screen
           name="Documents"
