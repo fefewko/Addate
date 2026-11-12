@@ -174,6 +174,10 @@ GRANT EXECUTE ON FUNCTION public.my_profile() TO authenticated;
 -- 4. Расстояние до скрытых анкет
 -- ===========================================================================
 
+-- Расстояние считается формулой гаверсинуса на встроенных функциях pg_catalog.
+-- Оператор earthdistance `<@>` здесь использовать нельзя: функции объявлены с
+-- `search_path = ''`, а оператор живёт в схеме расширения (public/extensions) и
+-- при пустом search_path не находится.
 CREATE OR REPLACE FUNCTION public.nearby_profiles(
   viewer_lat double precision,
   viewer_lng double precision
@@ -185,7 +189,11 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
   select p.id as profile_id,
-         (point(p.longitude, p.latitude) <@> point(viewer_lng, viewer_lat)) * 1.60934 as distance_km
+         6371.0088 * 2 * asin(least(1.0::double precision, sqrt(
+           power(sin(radians(p.latitude - viewer_lat) / 2), 2)
+           + cos(radians(viewer_lat)) * cos(radians(p.latitude))
+             * power(sin(radians(p.longitude - viewer_lng) / 2), 2)
+         ))) as distance_km
   from public.profiles p
   where p.moderation_status = 'approved'
     and not p.profile_hidden
@@ -259,7 +267,11 @@ AS $$
        and p.longitude is not null
        and viewer_lat is not null
        and viewer_lng is not null
-      then (point(p.longitude, p.latitude) <@> point(viewer_lng, viewer_lat)) * 1.60934
+      then 6371.0088 * 2 * asin(least(1.0::double precision, sqrt(
+        power(sin(radians(p.latitude - viewer_lat) / 2), 2)
+        + cos(radians(viewer_lat)) * cos(radians(p.latitude))
+          * power(sin(radians(p.longitude - viewer_lng) / 2), 2)
+      )))
     end as distance_km
   from public.profiles p
   where p.moderation_status = 'approved'
@@ -297,7 +309,7 @@ GRANT EXECUTE ON FUNCTION public.feed_profiles(uuid[], double precision, double 
 -- my_profile(). Прямыми остаются идентификатор, служебные поля модерации,
 -- публичный ключ E2EE и сами настройки приватности.
 
-REVOKE SELECT ON public.profiles FROM authenticated;
+REVOKE SELECT ON public.profiles FROM PUBLIC, anon, authenticated;
 
 GRANT SELECT (
   id,
