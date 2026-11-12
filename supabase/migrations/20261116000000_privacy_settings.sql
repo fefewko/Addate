@@ -311,6 +311,31 @@ GRANT EXECUTE ON FUNCTION public.feed_profiles(uuid[], double precision, double 
 
 REVOKE SELECT ON public.profiles FROM PUBLIC, anon, authenticated;
 
+-- Запись в свою анкету. Служебные поля (is_admin, moderation_*, согласия)
+-- защищает триггер protect_profile_service_fields; без этого гранта любое
+-- сохранение падало с «permission denied for table profiles».
+GRANT UPDATE ON public.profiles TO authenticated;
+
+-- REVOKE на уровне таблицы не снимает колоночные гранты, выданные ранее
+-- в 20260926000000. Без явного отзыва чувствительные колонки продолжали бы
+-- отдаваться напрямую через PostgREST в обход profile_cards.
+REVOKE SELECT (
+  display_name,
+  birth_date,
+  gender,
+  looking_for,
+  city,
+  bio,
+  sobriety_status,
+  sobriety_since,
+  substance_type,
+  photo_url,
+  additional_photos,
+  height_cm,
+  weight_kg,
+  last_seen_at
+) ON public.profiles FROM authenticated;
+
 GRANT SELECT (
   id,
   is_admin,
