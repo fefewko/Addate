@@ -15,17 +15,34 @@ import {
   SUBSTANCE_OPTIONS,
   type SobrietyStatus,
 } from '../lib/profileDisplay';
+import DateOfBirthInput from '../ui/DateOfBirthInput';
+import DatePartsInput from '../ui/DatePartsInput';
+import {
+  EMPTY_PARTS,
+  isoToParts,
+  partsToIso,
+  validateBirthDateParts,
+  validatePastDateParts,
+  type BirthDateParts,
+} from '../lib/date';
 
 const screenWidth = Dimensions.get('window').width;
 
 const MAX_ADDITIONAL_PHOTOS = 4;
 
+function sameParts(a: BirthDateParts, b: BirthDateParts): boolean {
+  return a.day === b.day && a.month === b.month && a.year === b.year;
+}
+
 type MyProfileRow = {
+  display_name: string | null;
+  birth_date: string | null;
   city: string | null;
   height_cm: number | null;
   weight_kg: number | null;
   bio: string | null;
   sobriety_status: SobrietyStatus | null;
+  sobriety_since: string | null;
   substance_type: string[] | null;
   photo_url: string | null;
   additional_photos: string[] | null;
@@ -37,11 +54,17 @@ export default function Profile() {
   const [userId, setUserId] = useState<string | null>(null);
   const [email, setEmail] = useState('');
 
+  const [displayName, setDisplayName] = useState('');
+  const [birth, setBirth] = useState<BirthDateParts>(EMPTY_PARTS);
+  const [birthError, setBirthError] = useState<string | null>(null);
+
   const [city, setCity] = useState('');
   const [heightCm, setHeightCm] = useState('');
   const [weightKg, setWeightKg] = useState('');
   const [bio, setBio] = useState('');
   const [sobrietyStatus, setSobrietyStatus] = useState<SobrietyStatus>('ne_ukazano');
+  const [sobrietySince, setSobrietySince] = useState<BirthDateParts>(EMPTY_PARTS);
+  const [sobrietySinceError, setSobrietySinceError] = useState<string | null>(null);
   const [substances, setSubstances] = useState<string[]>([]);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [additionalPhotos, setAdditionalPhotos] = useState<string[]>([]);
@@ -53,11 +76,14 @@ export default function Profile() {
   const [viewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
   const [original, setOriginal] = useState<{
+    displayName: string;
+    birth: BirthDateParts;
     city: string;
     heightCm: string;
     weightKg: string;
     bio: string;
     sobrietyStatus: SobrietyStatus;
+    sobrietySince: BirthDateParts;
     substances: string[];
   } | null>(null);
 
@@ -96,32 +122,41 @@ export default function Profile() {
       return;
     }
 
+    setDisplayName(profile.display_name || '');
+    setBirth(isoToParts(profile.birth_date));
     setCity(profile.city || '');
     setHeightCm(profile.height_cm ? String(profile.height_cm) : '');
     setWeightKg(profile.weight_kg ? String(profile.weight_kg) : '');
     setBio(profile.bio || '');
     setSobrietyStatus(profile.sobriety_status || 'ne_ukazano');
+    setSobrietySince(isoToParts(profile.sobriety_since));
     setSubstances(profile.substance_type || []);
     setPhotoUrl(profile.photo_url);
     setAdditionalPhotos(profile.additional_photos || []);
 
     setOriginal({
+      displayName: profile.display_name || '',
+      birth: isoToParts(profile.birth_date),
       city: profile.city || '',
       heightCm: profile.height_cm ? String(profile.height_cm) : '',
       weightKg: profile.weight_kg ? String(profile.weight_kg) : '',
       bio: profile.bio || '',
       sobrietyStatus: profile.sobriety_status || 'ne_ukazano',
+      sobrietySince: isoToParts(profile.sobriety_since),
       substances: profile.substance_type || [],
     });
   }, []);
 
   const isDirty =
     original !== null &&
-    (city !== original.city ||
+    (displayName !== original.displayName ||
+      !sameParts(birth, original.birth) ||
+      city !== original.city ||
       heightCm !== original.heightCm ||
       weightKg !== original.weightKg ||
       bio !== original.bio ||
       sobrietyStatus !== original.sobrietyStatus ||
+      !sameParts(sobrietySince, original.sobrietySince) ||
       substances.length !== original.substances.length ||
       substances.some((s) => !original.substances.includes(s)));
 
@@ -231,16 +266,43 @@ export default function Profile() {
 
   async function handleSave() {
     if (!userId) return;
+
+    if (!displayName.trim()) {
+      appAlert.alert('Укажите имя', 'Имя не может быть пустым.');
+      return;
+    }
+
+    const birthProblem = validateBirthDateParts(birth);
+    if (birthProblem) {
+      setBirthError(birthProblem);
+      return;
+    }
+    setBirthError(null);
+
+    const sinceProblem = validatePastDateParts(sobrietySince, {
+      notBeforeIso: partsToIso(birth),
+    });
+    if (sinceProblem) {
+      setSobrietySinceError(sinceProblem);
+      return;
+    }
+    setSobrietySinceError(null);
+
     setSaving(true);
+
+    const trimmedName = displayName.trim();
 
     const { error } = await supabase
       .from('profiles')
       .update({
+        display_name: trimmedName,
+        birth_date: partsToIso(birth),
         city: city.trim() || null,
         height_cm: heightCm ? parseInt(heightCm, 10) : null,
         weight_kg: weightKg ? parseInt(weightKg, 10) : null,
         bio: bio.trim() || null,
         sobriety_status: sobrietyStatus,
+        sobriety_since: partsToIso(sobrietySince),
         substance_type: substances.length > 0 ? substances : null,
         updated_at: new Date().toISOString(),
       })
@@ -253,7 +315,18 @@ export default function Profile() {
       return;
     }
 
-    setOriginal({ city, heightCm, weightKg, bio, sobrietyStatus, substances });
+    setDisplayName(trimmedName);
+    setOriginal({
+      displayName: trimmedName,
+      birth,
+      city,
+      heightCm,
+      weightKg,
+      bio,
+      sobrietyStatus,
+      sobrietySince,
+      substances,
+    });
     appAlert.alert('Сохранено', 'Изменения профиля сохранены.');
   }
 
@@ -314,6 +387,25 @@ export default function Profile() {
         <Text style={styles.readOnlyText}>{email}</Text>
       </View>
 
+      <Text style={styles.label}>Имя</Text>
+      <TextInput
+        style={styles.input}
+        placeholderTextColor={colors.textFaint}
+        placeholder="Как вас называть"
+        value={displayName}
+        onChangeText={setDisplayName}
+      />
+
+      <Text style={styles.label}>Дата рождения</Text>
+      <DateOfBirthInput
+        value={birth}
+        onChange={(next) => {
+          setBirth(next);
+          if (birthError) setBirthError(null);
+        }}
+        error={birthError}
+      />
+
       <Text style={styles.label}>Город</Text>
       <TextInput
         style={styles.input}
@@ -372,6 +464,25 @@ export default function Profile() {
           <Text style={styles.optionLabel}>{opt.label}</Text>
         </TouchableOpacity>
       ))}
+
+      <Text style={styles.sectionLabel}>Дата начала трезвости</Text>
+      <Text style={styles.dateHint}>
+        Необязательно. Другие увидят её, только если в «Моей приватности» включён
+        показ даты трезвости.
+      </Text>
+      <DatePartsInput
+        value={sobrietySince}
+        onChange={(next) => {
+          setSobrietySince(next);
+          if (sobrietySinceError) setSobrietySinceError(null);
+        }}
+        error={sobrietySinceError}
+        labels={{
+          day: 'День начала трезвости',
+          month: 'Месяц начала трезвости',
+          year: 'Год начала трезвости',
+        }}
+      />
 
       <Text style={styles.sectionLabel}>Что употребляли</Text>
       {SUBSTANCE_OPTIONS.map((opt) => (
@@ -597,6 +708,7 @@ const styles = StyleSheet.create({
   thumbAdd: { alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed' },
   thumbAddText: { fontSize: 28, color: colors.textFaint },
   hint: { fontSize: 12, color: colors.textFaint, marginTop: 8, marginBottom: 8 },
+  dateHint: { fontSize: 12, color: colors.textFaint, marginTop: -2, marginBottom: 8, lineHeight: 16 },
   saveButton: { backgroundColor: colors.accent, borderRadius: 8, padding: 16, alignItems: 'center', marginTop: 20 },
   buttonDisabled: { opacity: 0.6 },
   saveButtonText: { color: colors.white, fontSize: 16, fontWeight: '600' },

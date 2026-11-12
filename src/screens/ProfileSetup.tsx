@@ -18,11 +18,13 @@ import {
   type SobrietyStatus,
 } from '../lib/profileDisplay';
 import DateOfBirthInput from '../ui/DateOfBirthInput';
+import DatePartsInput from '../ui/DatePartsInput';
 import {
   EMPTY_PARTS,
   isoToParts,
   partsToIso,
   validateBirthDateParts,
+  validatePastDateParts,
   type BirthDateParts,
 } from '../lib/date';
 
@@ -32,6 +34,7 @@ type MyProfileRow = {
   city: string | null;
   bio: string | null;
   sobriety_status: SobrietyStatus | null;
+  sobriety_since: string | null;
   substance_type: string[] | null;
   photo_url: string | null;
 };
@@ -53,6 +56,8 @@ export default function ProfileSetup() {
   const [city, setCity] = useState('');
   const [bio, setBio] = useState('');
   const [sobrietyStatus, setSobrietyStatus] = useState<SobrietyStatus>('ne_ukazano');
+  const [sobrietySince, setSobrietySince] = useState<BirthDateParts>(EMPTY_PARTS);
+  const [sobrietySinceError, setSobrietySinceError] = useState<string | null>(null);
   const [substances, setSubstances] = useState<string[]>([]);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
 
@@ -95,6 +100,7 @@ export default function ProfileSetup() {
       setCity(profile.city || '');
       setBio(profile.bio || '');
       setSobrietyStatus((profile.sobriety_status as SobrietyStatus) || 'ne_ukazano');
+      setSobrietySince(isoToParts(profile.sobriety_since));
       setSubstances(profile.substance_type || []);
       setSavedPhotoUrl(profile.photo_url || null);
       setEditingExisting(true);
@@ -158,6 +164,15 @@ export default function ProfileSetup() {
     }
     setBirthError(null);
 
+    const sinceProblem = validatePastDateParts(sobrietySince, {
+      notBeforeIso: partsToIso(birth) ?? savedBirthDate,
+    });
+    if (sinceProblem) {
+      setSobrietySinceError(sinceProblem);
+      return;
+    }
+    setSobrietySinceError(null);
+
     setLoading(true);
 
     const {
@@ -198,6 +213,7 @@ export default function ProfileSetup() {
         city: city.trim() || null,
         bio: bio.trim() || null,
         sobriety_status: sobrietyStatus,
+        sobriety_since: partsToIso(sobrietySince),
         substance_type: substances.length > 0 ? substances : null,
         photo_url: photoUrl,
         updated_at: new Date().toISOString(),
@@ -281,6 +297,25 @@ export default function ProfileSetup() {
         </TouchableOpacity>
       ))}
 
+      <Text style={styles.sectionLabel}>Дата начала трезвости</Text>
+      <Text style={styles.dateHint}>
+        Необязательно. Другие увидят её, только если в «Моей приватности» включён
+        показ даты трезвости.
+      </Text>
+      <DatePartsInput
+        value={sobrietySince}
+        onChange={(next) => {
+          setSobrietySince(next);
+          if (sobrietySinceError) setSobrietySinceError(null);
+        }}
+        error={sobrietySinceError}
+        labels={{
+          day: 'День начала трезвости',
+          month: 'Месяц начала трезвости',
+          year: 'Год начала трезвости',
+        }}
+      />
+
       <Text style={styles.sectionLabel}>Что употребляли (необязательно, можно несколько)</Text>
       {SUBSTANCE_OPTIONS.map((opt) => (
         <TouchableOpacity
@@ -347,6 +382,7 @@ const styles = StyleSheet.create({
   },
   textArea: { height: 90, textAlignVertical: 'top' },
   sectionLabel: { fontSize: 14, fontWeight: '600', marginTop: 12, marginBottom: 8, color: colors.textPrimary },
+  dateHint: { fontSize: 12, color: colors.textFaint, marginTop: -2, marginBottom: 8, lineHeight: 16 },
   radioRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   radio: {
     width: 20,

@@ -93,6 +93,36 @@ export function validateBirthDateParts(parts: BirthDateParts): string | null {
   return null;
 }
 
+// Необязательная дата в прошлом: дата начала трезвости. Пустые поля — это
+// нормальное «не указано», а не ошибка. notBeforeIso не даёт поставить дату
+// раньше даты рождения.
+export function validatePastDateParts(
+  parts: BirthDateParts,
+  options: { notBeforeIso?: string | null } = {}
+): string | null {
+  if (!parts.day && !parts.month && !parts.year) {
+    return null;
+  }
+
+  const date = toDate(parts);
+  if (!date) {
+    return 'Такой даты не бывает. Проверьте день, месяц и год.';
+  }
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (date.getTime() > today.getTime()) {
+    return 'Дата не может быть в будущем.';
+  }
+
+  const min = toDate(isoToParts(options.notBeforeIso ?? null));
+  if (min && date.getTime() < min.getTime()) {
+    return 'Дата не может быть раньше даты рождения.';
+  }
+
+  return null;
+}
+
 export function formatForDisplay(iso: string | null): string {
   const { day, month, year } = isoToParts(iso);
   if (!day || !month || !year) return '';
