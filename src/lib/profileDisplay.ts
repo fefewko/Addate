@@ -77,9 +77,21 @@ export function formatLastActive(value: string | null): string | null {
   return new Date(value).toLocaleDateString('ru-RU');
 }
 
-// Дата без времени — для даты начала трезвости.
+// Дата без времени — для даты начала трезвости. Даты из Postgres приходят
+// как YYYY-MM-DD; new Date('YYYY-MM-DD') трактует их как UTC и в западных
+// часовых поясах может сдвинуть на предыдущий день, поэтому разбираем вручную.
 export function formatDate(value: string | null): string | null {
   if (!value) return null;
+
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (dateOnly) {
+    return new Date(
+      Number(dateOnly[1]),
+      Number(dateOnly[2]) - 1,
+      Number(dateOnly[3])
+    ).toLocaleDateString('ru-RU');
+  }
+
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return date.toLocaleDateString('ru-RU');
