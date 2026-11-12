@@ -145,25 +145,31 @@ export default function ProfileSetup() {
   async function handleSave() {
     setError(null);
 
-    if (!displayName.trim()) {
-      setError('Укажите имя.');
-      return;
+    // Имя и дата рождения задаются при регистрации (проверка возраста 18+).
+    // При правке уже существующей анкеты обычный пользователь их менять не может.
+    if (!editingExisting) {
+      if (!displayName.trim()) {
+        setError('Укажите имя.');
+        return;
+      }
+
+      // Дата могла прийти с экрана регистрации уже заполненной. Если пользователь
+      // её не трогал, не требуем ввода; если менял — проверяем как обычно.
+      const birthProblem = validateBirthDateParts(birth);
+      const birthWasEmpty = birth.day === '' && birth.month === '' && birth.year === '';
+      if (birthProblem && !birthWasEmpty) {
+        setBirthError(birthProblem);
+        return;
+      }
+      if (birthWasEmpty && !savedBirthDate) {
+        setBirthError(validateBirthDateParts(birth));
+        return;
+      }
+      setBirthError(null);
     }
 
-    // Дата могла прийти с экрана регистрации уже заполненной. Если пользователь
-    // её не трогал, не требуем ввода; если менял — проверяем как обычно.
-    const birthProblem = validateBirthDateParts(birth);
-    const birthWasEmpty = birth.day === '' && birth.month === '' && birth.year === '';
-    if (birthProblem && !birthWasEmpty) {
-      setBirthError(birthProblem);
-      return;
-    }
-    if (birthWasEmpty && !savedBirthDate) {
-      setBirthError(validateBirthDateParts(birth));
-      return;
-    }
-    setBirthError(null);
-
+    // Дата начала трезвости не может быть в будущем и раньше даты рождения,
+    // даже при правке анкеты — проверяем её в любой момент сохранения.
     const sinceProblem = validatePastDateParts(sobrietySince, {
       notBeforeIso: partsToIso(birth) ?? savedBirthDate,
     });
@@ -208,8 +214,12 @@ export default function ProfileSetup() {
     const { error: updateError } = await supabase
       .from('profiles')
       .update({
-        display_name: displayName.trim(),
-        birth_date: isoBirthDate,
+        ...(editingExisting
+          ? {}
+          : {
+              display_name: displayName.trim(),
+              birth_date: isoBirthDate,
+            }),
         city: city.trim() || null,
         bio: bio.trim() || null,
         sobriety_status: sobrietyStatus,
@@ -247,24 +257,28 @@ export default function ProfileSetup() {
         <Text style={styles.photoHint}>Фото уже загружено — нажмите, чтобы заменить</Text>
       )}
 
-      <Text style={styles.label}>Имя</Text>
-      <TextInput
-        style={styles.input}
-        placeholderTextColor={colors.textFaint}
-        placeholder="Как вас называть"
-        value={displayName}
-        onChangeText={setDisplayName}
-      />
+      {!editingExisting && (
+        <>
+          <Text style={styles.label}>Имя</Text>
+          <TextInput
+            style={styles.input}
+            placeholderTextColor={colors.textFaint}
+            placeholder="Как вас называть"
+            value={displayName}
+            onChangeText={setDisplayName}
+          />
 
-      <Text style={styles.label}>Дата рождения</Text>
-      <DateOfBirthInput
-        value={birth}
-        onChange={(next) => {
-          setBirth(next);
-          if (birthError) setBirthError(null);
-        }}
-        error={birthError}
-      />
+          <Text style={styles.label}>Дата рождения</Text>
+          <DateOfBirthInput
+            value={birth}
+            onChange={(next) => {
+              setBirth(next);
+              if (birthError) setBirthError(null);
+            }}
+            error={birthError}
+          />
+        </>
+      )}
 
       <Text style={styles.label}>Город</Text>
       <TextInput

@@ -15,13 +15,11 @@ import {
   SUBSTANCE_OPTIONS,
   type SobrietyStatus,
 } from '../lib/profileDisplay';
-import DateOfBirthInput from '../ui/DateOfBirthInput';
 import DatePartsInput from '../ui/DatePartsInput';
 import {
   EMPTY_PARTS,
   isoToParts,
   partsToIso,
-  validateBirthDateParts,
   validatePastDateParts,
   type BirthDateParts,
 } from '../lib/date';
@@ -54,9 +52,10 @@ export default function Profile() {
   const [userId, setUserId] = useState<string | null>(null);
   const [email, setEmail] = useState('');
 
-  const [displayName, setDisplayName] = useState('');
+  // Дата рождения больше не редактируется пользователем: она проставляется при
+  // регистрации (проверка возраста 18+) и ниже используется как нижняя граница
+  // для даты начала трезвости. Смена имени у пользователя отключена.
   const [birth, setBirth] = useState<BirthDateParts>(EMPTY_PARTS);
-  const [birthError, setBirthError] = useState<string | null>(null);
 
   const [city, setCity] = useState('');
   const [heightCm, setHeightCm] = useState('');
@@ -76,8 +75,6 @@ export default function Profile() {
   const [viewerVisible, setViewerVisible] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
   const [original, setOriginal] = useState<{
-    displayName: string;
-    birth: BirthDateParts;
     city: string;
     heightCm: string;
     weightKg: string;
@@ -122,7 +119,6 @@ export default function Profile() {
       return;
     }
 
-    setDisplayName(profile.display_name || '');
     setBirth(isoToParts(profile.birth_date));
     setCity(profile.city || '');
     setHeightCm(profile.height_cm ? String(profile.height_cm) : '');
@@ -135,8 +131,6 @@ export default function Profile() {
     setAdditionalPhotos(profile.additional_photos || []);
 
     setOriginal({
-      displayName: profile.display_name || '',
-      birth: isoToParts(profile.birth_date),
       city: profile.city || '',
       heightCm: profile.height_cm ? String(profile.height_cm) : '',
       weightKg: profile.weight_kg ? String(profile.weight_kg) : '',
@@ -149,9 +143,7 @@ export default function Profile() {
 
   const isDirty =
     original !== null &&
-    (displayName !== original.displayName ||
-      !sameParts(birth, original.birth) ||
-      city !== original.city ||
+    (city !== original.city ||
       heightCm !== original.heightCm ||
       weightKg !== original.weightKg ||
       bio !== original.bio ||
@@ -267,18 +259,6 @@ export default function Profile() {
   async function handleSave() {
     if (!userId) return;
 
-    if (!displayName.trim()) {
-      appAlert.alert('Укажите имя', 'Имя не может быть пустым.');
-      return;
-    }
-
-    const birthProblem = validateBirthDateParts(birth);
-    if (birthProblem) {
-      setBirthError(birthProblem);
-      return;
-    }
-    setBirthError(null);
-
     const sinceProblem = validatePastDateParts(sobrietySince, {
       notBeforeIso: partsToIso(birth),
     });
@@ -290,13 +270,9 @@ export default function Profile() {
 
     setSaving(true);
 
-    const trimmedName = displayName.trim();
-
     const { error } = await supabase
       .from('profiles')
       .update({
-        display_name: trimmedName,
-        birth_date: partsToIso(birth),
         city: city.trim() || null,
         height_cm: heightCm ? parseInt(heightCm, 10) : null,
         weight_kg: weightKg ? parseInt(weightKg, 10) : null,
@@ -315,10 +291,7 @@ export default function Profile() {
       return;
     }
 
-    setDisplayName(trimmedName);
     setOriginal({
-      displayName: trimmedName,
-      birth,
       city,
       heightCm,
       weightKg,
@@ -386,25 +359,6 @@ export default function Profile() {
       <View style={styles.readOnlyField}>
         <Text style={styles.readOnlyText}>{email}</Text>
       </View>
-
-      <Text style={styles.label}>Имя</Text>
-      <TextInput
-        style={styles.input}
-        placeholderTextColor={colors.textFaint}
-        placeholder="Как вас называть"
-        value={displayName}
-        onChangeText={setDisplayName}
-      />
-
-      <Text style={styles.label}>Дата рождения</Text>
-      <DateOfBirthInput
-        value={birth}
-        onChange={(next) => {
-          setBirth(next);
-          if (birthError) setBirthError(null);
-        }}
-        error={birthError}
-      />
 
       <Text style={styles.label}>Город</Text>
       <TextInput
