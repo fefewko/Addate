@@ -2,7 +2,7 @@
   "expo": {
     "name": "ADDate",
     "slug": "ADDate",
-    "version": "0.0.31",
+    "version": "0.0.32",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "addate",
@@ -13,8 +13,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#121212",
-        "foregroundImage": "./assets/icon.png"
+        "backgroundColor": "#f9faf5",
+        "foregroundImage": "./assets/adaptive-icon.png"
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.addate.ADDate",
@@ -57,7 +57,7 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#121212",
-          "image": "./assets/Logo.png",
+          "image": "./assets/splash-logo.png",
           "imageWidth": 120
         }
       ]
