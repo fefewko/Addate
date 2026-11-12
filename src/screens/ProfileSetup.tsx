@@ -103,7 +103,9 @@ export default function ProfileSetup() {
       setSobrietySince(isoToParts(profile.sobriety_since));
       setSubstances(profile.substance_type || []);
       setSavedPhotoUrl(profile.photo_url || null);
-      setEditingExisting(true);
+      // Пустая анкета с триггера «новый пользователь» — это первый запуск
+      // (заполняем имя/дату рождения), а не правка после отклонения модерации.
+      setEditingExisting(!!(profile.display_name || profile.birth_date || profile.city || profile.bio));
     }
 
     loadExisting();
