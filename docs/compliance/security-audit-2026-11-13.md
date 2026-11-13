@@ -622,14 +622,32 @@ commit;
 | 9 | `moderation_note`: отзыв чтения | после установки 0.0.35 |
 | 10 | `messages`/`matches`: колоночные права, `no_self_match`, чтение только `matched` | применён |
 
-### Почему понадобились шаги 7–10
+Отдельными миграциями:
+
+| Файл | Содержание | Статус |
+|---|---|---|
+| `20261118000000_admin_profiles_rpc.sql` | `admin_profiles()` и `admin_profile_names()` — чтение анкет панелью модерации через `SECURITY DEFINER` с проверкой `private.is_admin()` | применён |
+| `20261118000001_private_schema_grants.sql` | `USAGE` на схему `private` и `EXECUTE` на `private.is_admin()` для `authenticated` | применён |
+
+### Почему понадобились шаги 7–10 и 12
 
 На рабочей базе обнаружены следы `ROLLBACK_20260926000000.sql`: он вернул
 табличный `SELECT` на `profiles` (перекрывает колоночные гранты), снял
 `my_location()`, вернул табличный `UPDATE` на `messages`/`matches`, удалил
-триггер `no_self_match` и откатил политику чтения сообщений к версии без
-проверки `status = 'matched'`. Шаги 7, 8 и 10 восстанавливают задуманное
-состояние.
+триггер `no_self_match`, откатил политику чтения сообщений к версии без
+проверки `status = 'matched'`, а также снял `USAGE` на схему `private`.
+Шаги 7, 8, 10 и 12 восстанавливают задуманное состояние.
+
+Симптомы, по которым это всплывало: `permission denied for column latitude`
+при попытке отозвать координаты, `permission denied for table profiles` при
+загрузке анкет в панели модерации, `permission denied for schema private`
+при одобрении анкеты (триггер `protect_profile_service_fields` вызывает
+`private.is_admin()` от имени пользователя).
+
+Панель `addate_moderation` переведена на RPC `admin_profiles()` и
+`admin_profile_names()`: возвращать табличный `SELECT` на `profiles` нельзя,
+он отдаёт координаты и содержимое анкет всем авторизованным, а не только
+администратору.
 
 Клиентские правки, входящие в 0.0.35:
 
