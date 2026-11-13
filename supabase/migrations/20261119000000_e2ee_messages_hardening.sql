@@ -286,6 +286,23 @@ BEGIN
   IF has_function_privilege('anon','public.delete_message(uuid, boolean)','EXECUTE') THEN
     RAISE EXCEPTION 'Шаг 4: delete_message() доступна anon.';
   END IF;
+
+  -- search_path у SECURITY DEFINER-функции должен быть зафиксирован, иначе
+  -- вызывающий может подставить свою схему и подменить таблицы внутри функции.
+  -- Postgres хранит пустое значение как `search_path=""`, поэтому принимаем обе
+  -- формы записи и требуем, чтобы значение действительно было пустым.
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    CROSS JOIN LATERAL unnest(p.proconfig) AS cfg
+    WHERE n.nspname = 'public'
+      AND p.proname = 'delete_message'
+      AND cfg LIKE 'search_path=%'
+      AND btrim(split_part(cfg, '=', 2), '"') = ''
+  ) THEN
+    RAISE EXCEPTION 'Шаг 4: у delete_message() не зафиксирован пустой search_path.';
+  END IF;
 END;
 $$;
 
