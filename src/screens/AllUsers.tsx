@@ -14,6 +14,17 @@ import { supabase } from '../lib/supabase';
 import { getMyCoordinates } from '../lib/location';
 import { decryptText, encryptText, getLocalPrivateKey, getPublicKey, prepareSendSession, publicKeyToBase64 } from '../lib/e2ee';
 import { offerKeyReset } from '../lib/e2eeReset';
+import {
+  dedupeByNonce,
+  deleteMessageForEveryone,
+  deleteMessageForMe,
+  envelopeNonce,
+  fetchHiddenMessageIds,
+  loadSeenNonces,
+  rememberSeenNonces,
+  sendEncryptedMessage,
+} from '../lib/messageApi';
+import { getPeerKeyStatus, rememberPeerKey } from '../lib/keyTrust';
 import LoadError from '../ui/LoadError';
 import { SOBRIETY_LABEL, SOBRIETY_OPTIONS, SUBSTANCE_OPTIONS, SobrietyStatus, calcAge, formatDistance } from '../lib/profileDisplay';
 import { colors } from '../lib/theme';
@@ -206,7 +217,22 @@ const sliderStyles = StyleSheet.create({
   },
 });
 
-type Message = { id: string; match_id: string; sender_id: string; content: string | null; image_path: string | null; created_at: string };
+type Message = {
+  id: string;
+  match_id: string;
+  sender_id: string;
+  content: string | null;
+  image_path: string | null;
+  created_at: string;
+  client_message_id?: string | null;
+  deleted_at?: string | null;
+};
+
+const UNDECRYPTABLE = 'Сообщение не удалось расшифровать';
+
+function undecrypted(content: string | null): string | null {
+  return envelopeNonce(content) ? UNDECRYPTABLE : content;
+}
 
 // Компактный чат прямо во всплывающем окне — чтобы можно было ответить
 // человеку, не покидая вкладку "Все" и не переходя в "Сообщения".
@@ -232,7 +258,12 @@ function QuickChatModal({
   const [sending, setSending] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [recipientId, setRecipientId] = useState<string | null>(null);
+  const [keyWarning, setKeyWarning] = useState<{ fingerprint: string } | null>(null);
+  const [peerKeyB64, setPeerKeyB64] = useState<string | null>(null);
   const listRef = useRef<FlatList>(null);
+  const sendingRef = useRef(false);
+  const seenNoncesRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!visible || !matchId || !myId) return;
@@ -240,12 +271,22 @@ function QuickChatModal({
     let active = true;
 
     async function load() {
+      if (!myId || !matchId) return;
       setLoading(true);
       const { data } = await supabase
         .from('messages')
         .select('*')
         .eq('match_id', matchId)
         .order('created_at', { ascending: true });
+
+      const rid = await resolveRecipientId();
+      if (active) setRecipientId(rid);
+
+      // Скрытые у себя не показываем; удалённые у обоих остаются как
+      // «Сообщение удалено». Дубли по nonce — replay, отбрасываем.
+      const rows = data || [];
+      const hidden = await fetchHiddenMessageIds(myId, rows.map((m) => m.id));
+      const visible = dedupeByNonce(rows.filter((m) => !hidden.has(m.id)));
 
       const privateKey = myId ? await getLocalPrivateKey(myId) : null;
 
@@ -254,7 +295,7 @@ function QuickChatModal({
       // загрузки всего диалога.
       const peerKeys = new Map<string, string>();
       await Promise.all(
-        Array.from(new Set((data || []).map((m) => m.sender_id).filter((id): id is string => !!id))).map(
+        Array.from(new Set(visible.map((m) => m.sender_id).filter((id): id is string => !!id))).map(
           async (senderId) => {
             try {
               const key = await getPublicKey(senderId);
@@ -268,8 +309,47 @@ function QuickChatModal({
         )
       );
 
+      // Доверие к ключу получателя: при смене показываем предупреждение.
+      // В пустой переписке ключа получателя нет в peerKeys (там только авторы
+      // сообщений), поэтому запрашиваем его отдельно.
+      let ridKey = rid ? peerKeys.get(rid) ?? null : null;
+      if (!ridKey && rid) {
+        try {
+          const key = await getPublicKey(rid);
+          if (key) ridKey = await publicKeyToBase64(key);
+        } catch (e) {
+          log.warn('E2EE: не удалось прочитать публичный ключ получателя:', e);
+        }
+      }
+      if (rid && ridKey) {
+        if (active) setPeerKeyB64(ridKey);
+        const check = await getPeerKeyStatus(myId, rid, ridKey);
+        if (check.status === 'new') {
+          await rememberPeerKey(myId, rid, ridKey);
+          if (active) setKeyWarning(null);
+        } else if (check.status === 'changed') {
+          if (active) setKeyWarning({ fingerprint: check.fingerprint });
+        } else if (active) {
+          setKeyWarning(null);
+        }
+      }
+
+      if (rid) {
+        const nonces = visible
+          .map((m) => envelopeNonce(m.content))
+          .filter((n): n is string => !!n);
+        const known = await loadSeenNonces(myId, rid);
+        for (const n of nonces) known.add(n);
+        seenNoncesRef.current = known;
+        await rememberSeenNonces(myId, rid, nonces);
+      }
+
       const loaded = await Promise.all(
-        (data || []).map(async (m) => {
+        visible.map(async (m) => {
+          if (m.deleted_at) {
+            return { ...m, content: null, image_path: null } as Message;
+          }
+
           const peerPublicKeyB64 = m.sender_id ? peerKeys.get(m.sender_id) ?? null : null;
 
           if (m.image_path) {
@@ -287,13 +367,15 @@ function QuickChatModal({
           }
 
           if (!m.content) return m;
-          if (!privateKey || !peerPublicKeyB64) return m;
+          if (!privateKey || !peerPublicKeyB64) {
+            return { ...m, content: undecrypted(m.content) };
+          }
           try {
             const text = await decryptText(privateKey, peerPublicKeyB64, m.content);
             return { ...m, content: text };
           } catch (e) {
             log.warn('E2EE: не удалось расшифровать сообщение:', e);
-            return m;
+            return { ...m, content: undecrypted(m.content) };
           }
         })
       );
@@ -325,6 +407,18 @@ function QuickChatModal({
         async (payload) => {
           const newMessage = payload.new as Message;
           let message = newMessage;
+
+          const nonce = envelopeNonce(newMessage.content);
+          if (nonce && seenNoncesRef.current.has(nonce)) {
+            log.warn('E2EE: повторное сообщение (replay) отброшено:', newMessage.id);
+            return;
+          }
+          if (nonce) {
+            seenNoncesRef.current.add(nonce);
+            if (myId && recipientId) {
+              void rememberSeenNonces(myId, recipientId, [nonce]);
+            }
+          }
 
           let privateKey: Uint8Array | null = null;
           let peerPublicKeyB64: string | null = null;
@@ -361,9 +455,37 @@ function QuickChatModal({
               message = { ...newMessage, content: text };
             } catch (e) {
               log.warn('E2EE: не удалось расшифровать realtime-сообщение:', e);
+              message = { ...newMessage, content: undecrypted(newMessage.content) };
             }
+          } else if (newMessage.content) {
+            message = { ...newMessage, content: undecrypted(newMessage.content) };
           }
           setMessages((prev) => [...prev, message]);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'messages', filter: `match_id=eq.${matchId}` },
+        (payload) => {
+          const updated = payload.new as Message;
+          setMessages((prev) =>
+            prev.map((m) => {
+              if (m.id !== updated.id) return m;
+              if (updated.deleted_at) {
+                return { ...m, deleted_at: updated.deleted_at, content: null, image_path: null };
+              }
+              return m;
+            })
+          );
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'messages', filter: `match_id=eq.${matchId}` },
+        (payload) => {
+          const removed = payload.old as { id?: string };
+          if (!removed?.id) return;
+          setMessages((prev) => prev.filter((m) => m.id !== removed.id));
         }
       )
       .subscribe();
@@ -395,32 +517,119 @@ function QuickChatModal({
     return matchData.user_a === myId ? matchData.user_b : matchData.user_a;
   }
 
+  async function acceptPeerKey() {
+    if (!myId || !recipientId || !peerKeyB64) return;
+    await rememberPeerKey(myId, recipientId, peerKeyB64);
+    setKeyWarning(null);
+  }
+
+  async function removeMessageForMe(item: Message) {
+    try {
+      await deleteMessageForMe(item.id);
+      setMessages((prev) => prev.filter((m) => m.id !== item.id));
+    } catch (e: any) {
+      appAlert.alert('Ошибка', 'Не удалось удалить сообщение: ' + (e?.message ?? ''));
+    }
+  }
+
+  function confirmRemoveForEveryone(item: Message) {
+    appAlert.alert(
+      'Удалить у обоих?',
+      'Сообщение исчезнет у вас и у собеседника. Восстановить его нельзя.',
+      [
+        { text: 'Отмена', style: 'cancel' },
+        {
+          text: 'Удалить',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteMessageForEveryone(item.id, item.image_path);
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === item.id
+                    ? { ...m, content: null, image_path: null, deleted_at: new Date().toISOString() }
+                    : m
+                )
+              );
+            } catch (e: any) {
+              appAlert.alert('Ошибка', 'Не удалось удалить сообщение: ' + (e?.message ?? ''));
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  function handleMessageActions(item: Message) {
+    if (item.deleted_at) return;
+    const isMine = item.sender_id === myId;
+
+    appAlert.alert('Сообщение', 'Что сделать с сообщением?', [
+      ...(isMine
+        ? [
+            {
+              text: 'Удалить у обоих',
+              style: 'destructive' as const,
+              onPress: () => confirmRemoveForEveryone(item),
+            },
+          ]
+        : []),
+      {
+        text: 'Удалить у себя',
+        style: 'destructive' as const,
+        onPress: () => removeMessageForMe(item),
+      },
+      { text: 'Отмена', style: 'cancel' as const },
+    ]);
+  }
+
   async function handleSend() {
-    if (!text.trim() || !myId || !matchId) return;
+    if (!text.trim() || !myId || !matchId || sendingRef.current) return;
+
+    if (keyWarning) {
+      appAlert.alert(
+        'Ключ собеседника изменился',
+        `Новый отпечаток: ${keyWarning.fingerprint}.\n\nЕсли собеседник переустанавливал приложение — это ожидаемо. Сверьте отпечаток по другому каналу связи. Пока ключ не подтверждён, отправка заблокирована.`,
+        [
+          { text: 'Отмена', style: 'cancel' },
+          { text: 'Принять ключ', onPress: () => acceptPeerKey() },
+        ]
+      );
+      return;
+    }
+
+    sendingRef.current = true;
     setSending(true);
     const content = text.trim();
     setText('');
 
-    const recipientId = await resolveRecipientId();
+    try {
+      const rid = await resolveRecipientId();
 
-    const session = await prepareSendSession(myId, recipientId);
-    if (!session.ok) {
-      setText(content);
-      setSending(false);
-      log.warn('E2EE: не удалось подготовить сессию шифрования:', session.cause ?? session.message);
-      if (session.needsKeyReset) {
-        offerKeyReset(myId, session.message, () => handleSend());
-      } else {
-        appAlert.alert(session.title, session.message);
+      const session = await prepareSendSession(myId, rid);
+      if (!session.ok) {
+        setText(content);
+        log.warn('E2EE: не удалось подготовить сессию шифрования:', session.cause ?? session.message);
+        if (session.needsKeyReset) {
+          offerKeyReset(myId, session.message, () => handleSend());
+        } else {
+          appAlert.alert(session.title, session.message);
+        }
+        return;
       }
-      return;
-    }
-    const payload = await encryptText(session.privateKey, session.peerPublicKeyB64, content);
-    const { error } = await supabase.from('messages').insert({ match_id: matchId, sender_id: myId, content: JSON.stringify(payload) });
-    setSending(false);
-    if (error) {
-      appAlert.alert('Ошибка', 'Не удалось отправить сообщение.');
-      setText(content);
+      const payload = await encryptText(session.privateKey, session.peerPublicKeyB64, content);
+      const result = await sendEncryptedMessage({
+        matchId,
+        senderId: myId,
+        payload,
+      });
+      if (!result.ok) {
+        appAlert.alert('Ошибка', 'Не удалось отправить сообщение.');
+        setText(content);
+      }
+    } finally {
+      sendingRef.current = false;
+      setSending(false);
     }
   }
 
@@ -449,9 +658,9 @@ function QuickChatModal({
     if (!myId || !matchId) return;
     setUploadingImage(true);
     try {
-      const recipientId = await resolveRecipientId();
+      const rid = await resolveRecipientId();
 
-      const session = await prepareSendSession(myId, recipientId);
+      const session = await prepareSendSession(myId, rid);
       if (!session.ok) {
         log.warn('E2EE: не удалось подготовить сессию шифрования:', session.cause ?? session.message);
         if (session.needsKeyReset) {
@@ -467,13 +676,13 @@ function QuickChatModal({
         session.privateKey,
         session.peerPublicKeyB64
       );
-      const { error } = await supabase.from('messages').insert({
-        match_id: matchId,
-        sender_id: myId,
-        image_path: path,
-        content: JSON.stringify(payload),
+      const result = await sendEncryptedMessage({
+        matchId,
+        senderId: myId,
+        payload,
+        imagePath: path,
       });
-      if (error) throw new Error(error.message);
+      if (!result.ok) throw new Error(result.error);
       const displayUri = await writeDecryptedImage(bytes, format.mimeType, path);
       setDecryptedImages((prev) => ({ ...prev, [path]: displayUri }));
     } catch (e: any) {
@@ -495,6 +704,18 @@ function QuickChatModal({
           </TouchableOpacity>
         </View>
 
+        {keyWarning && (
+          <View style={styles.keyWarning}>
+            <Text style={styles.keyWarningTitle}>Ключ собеседника изменился</Text>
+            <Text style={styles.keyWarningText}>
+              Новый отпечаток: {keyWarning.fingerprint}. Сверьте его по другому каналу связи.
+            </Text>
+            <TouchableOpacity onPress={acceptPeerKey} style={styles.keyWarningButton}>
+              <Text style={styles.keyWarningButtonText}>Принять новый ключ</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {loading ? (
           <View style={styles.center}>
             <ActivityIndicator size="large" color={colors.accent} />
@@ -508,32 +729,56 @@ function QuickChatModal({
             onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
             renderItem={({ item }) => {
               const isMine = item.sender_id === myId;
+              const deleted = !!item.deleted_at;
 
-              if (item.image_path) {
+              if (item.image_path && !deleted) {
                 const url = item.image_path ? decryptedImages[item.image_path] ?? imageUrls[item.image_path] : null;
                 return (
-                  <View style={[styles.bubble, styles.imageBubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}>
-                    {url ? (
-                      <TouchableOpacity onPress={() => setPreviewUrl(url)}>
-                        <Image
-                          source={{ uri: url }}
-                          style={styles.chatImage}
-                          onError={() => refreshImage(item.image_path as string)}
-                        />
-                      </TouchableOpacity>
-                    ) : (
-                      <View style={[styles.chatImage, styles.chatImageLoading]}>
-                        <ActivityIndicator color={colors.white} />
-                      </View>
-                    )}
-                  </View>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    delayLongPress={350}
+                    onLongPress={() => handleMessageActions(item)}
+                  >
+                    <View style={[styles.bubble, styles.imageBubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}>
+                      {url ? (
+                        <TouchableOpacity onPress={() => setPreviewUrl(url)}>
+                          <Image
+                            source={{ uri: url }}
+                            style={styles.chatImage}
+                            onError={() => refreshImage(item.image_path as string)}
+                          />
+                        </TouchableOpacity>
+                      ) : (
+                        <View style={[styles.chatImage, styles.chatImageLoading]}>
+                          <ActivityIndicator color={colors.white} />
+                        </View>
+                      )}
+                    </View>
+                  </TouchableOpacity>
                 );
               }
 
               return (
-                <View style={[styles.bubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}>
-                  <Text style={isMine ? styles.bubbleTextMine : styles.bubbleTextTheirs}>{item.content}</Text>
-                </View>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  disabled={deleted}
+                  delayLongPress={350}
+                  onLongPress={() => handleMessageActions(item)}
+                >
+                  <View style={[styles.bubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}>
+                    <Text
+                      style={
+                        deleted
+                          ? styles.deletedText
+                          : isMine
+                            ? styles.bubbleTextMine
+                            : styles.bubbleTextTheirs
+                      }
+                    >
+                      {deleted ? 'Сообщение удалено' : item.content}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
               );
             }}
           />
@@ -1145,6 +1390,19 @@ const styles = StyleSheet.create({
   bubbleTheirs: { backgroundColor: colors.border, alignSelf: 'flex-start' },
   bubbleTextMine: { color: colors.white, fontSize: 15 },
   bubbleTextTheirs: { color: colors.textPrimary, fontSize: 15 },
+  deletedText: { color: colors.textMuted, fontSize: 15, fontStyle: 'italic' },
+  keyWarning: {
+    margin: 10,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.danger,
+    backgroundColor: 'rgba(255, 59, 48, 0.08)',
+  },
+  keyWarningTitle: { color: colors.danger, fontWeight: '700', fontSize: 14, marginBottom: 6 },
+  keyWarningText: { color: colors.textSecondary, fontSize: 13, lineHeight: 18 },
+  keyWarningButton: { alignSelf: 'flex-start', marginTop: 10, paddingVertical: 6 },
+  keyWarningButtonText: { color: colors.accent, fontWeight: '600', fontSize: 14 },
   quickChatInputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',

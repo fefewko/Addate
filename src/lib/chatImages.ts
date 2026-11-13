@@ -102,9 +102,14 @@ export async function writeDecryptedImage(bytes: Uint8Array, mimeType: string, i
     return `data:${mimeType};base64,${bytesToBase64(bytes)}`;
   }
   const File: any = (require('expo-file-system') as { File: any }).File;
-  const documentDirectory: string = (require('expo-file-system/legacy') as { documentDirectory: string }).documentDirectory;
-  const filename = id.split('/').pop() ?? 'image';
-  const file = new File(`${documentDirectory}${filename}`);
+  // cacheDirectory, а не documentDirectory: расшифрованные байты — это
+  // plaintext, и держать их в постоянном хранилище незачем. Кэш ОС может
+  // вытеснить, а резервная копия приложения его не включает.
+  const cacheDirectory: string = (require('expo-file-system/legacy') as { cacheDirectory: string }).cacheDirectory;
+  // В path лежит matchId/имя файла. Склеиваем в одно имя, чтобы фотографии из
+  // разных переписок не перетирали друг друга.
+  const filename = id.replace(/[\\/]/g, '_');
+  const file = new File(`${cacheDirectory}${filename}`);
   file.write(bytes);
   return file.uri;
 }

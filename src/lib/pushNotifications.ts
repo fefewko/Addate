@@ -62,8 +62,15 @@ export async function registerForPushNotifications(): Promise<void> {
 
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
-        name: 'default',
+        name: 'Сообщения',
+        description: 'Уведомления о новых сообщениях. Без текста переписки.',
         importance: Notifications.AndroidImportance.MAX,
+        // Текст сообщения в push и так не уходит (сервер видит только
+        // шифртекст), но и имя отправителя на экране блокировки показывать
+        // незачем: PRIVATE скрывает содержимое уведомления, пока устройство
+        // заблокировано.
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
+        showBadge: false,
       });
     }
 

@@ -13,6 +13,17 @@ import { decryptChatImage, getSignedChatImageUrls, uploadEncryptedChatImage, wri
 import { colors } from '../lib/theme';
 import { decryptText, encryptText, getLocalPrivateKey, getPublicKey, prepareSendSession, publicKeyToBase64 } from '../lib/e2ee';
 import { offerKeyReset } from '../lib/e2eeReset';
+import {
+  dedupeByNonce,
+  deleteMessageForEveryone,
+  deleteMessageForMe,
+  envelopeNonce,
+  fetchHiddenMessageIds,
+  loadSeenNonces,
+  rememberSeenNonces,
+  sendEncryptedMessage,
+} from '../lib/messageApi';
+import { getPeerKeyStatus, rememberPeerKey } from '../lib/keyTrust';
 
 type Message = {
   id: string;
@@ -21,7 +32,19 @@ type Message = {
   content: string | null;
   image_path: string | null;
   created_at: string;
+  client_message_id?: string | null;
+  deleted_at?: string | null;
+  read_at?: string | null;
 };
+
+const UNDECRYPTABLE = 'Сообщение не удалось расшифровать';
+
+// Если конверт не расшифровался (сменился ключ, нет ключа, повреждённые данные),
+// показываем понятный текст вместо JSON с nonce и ciphertext. Legacy-plaintext
+// (без конверта) оставляем как есть.
+function undecrypted(content: string | null): string | null {
+  return envelopeNonce(content) ? UNDECRYPTABLE : content;
+}
 
 const REPORT_CATEGORIES: { value: string; label: string }[] = [
   { value: 'harassment', label: 'Домогательства или оскорбления' },
@@ -52,7 +75,18 @@ export default function Chat() {
   const [isSupport, setIsSupport] = useState(false);
   const [sending, setSending] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [peerKeyB64, setPeerKeyB64] = useState<string | null>(null);
+  const [peerFingerprint, setPeerFingerprint] = useState<string | null>(null);
+  const [keyWarning, setKeyWarning] = useState<{
+    fingerprint: string;
+    previousFingerprint: string | null;
+  } | null>(null);
   const listRef = useRef<FlatList>(null);
+  // Синхронный флаг против двойного тапа: setSending обновляется асинхронно, и
+  // второй вызов успевает проскочить до перерисовки.
+  const sendingRef = useRef(false);
+  // nonce уже показанных сообщений: повторный конверт с тем же nonce — replay.
+  const seenNoncesRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const name = peerName || otherName;
@@ -165,6 +199,13 @@ export default function Chat() {
       return;
     }
 
+    // Скрытые у себя сообщения не показываем. Удалённые у обоих остаются в
+    // списке как «Сообщение удалено», чтобы не рвать порядок. Дубли по nonce
+    // отбрасываем: это один и тот же шифртекст, вставленный повторно.
+    const rows = data || [];
+    const hidden = await fetchHiddenMessageIds(user.id, rows.map((m) => m.id));
+    const visible = dedupeByNonce(rows.filter((m) => !hidden.has(m.id)));
+
     // Ключи нужны для каждого сообщения, но читать их из БД N раз незачем.
     const privateKey = await getLocalPrivateKey(user.id);
     let peerPublicKeyB64: string | null = null;
@@ -182,8 +223,47 @@ export default function Chat() {
       }
     }
 
+    // Доверие к ключу собеседника: первый ключ запоминаем молча (TOFU), при
+    // смене показываем предупреждение с отпечатком и не даём отправить новое,
+    // пока пользователь его не подтвердит.
+    if (peerId && peerPublicKeyB64) {
+      setPeerKeyB64(peerPublicKeyB64);
+      const check = await getPeerKeyStatus(user.id, peerId, peerPublicKeyB64);
+      setPeerFingerprint(check.fingerprint);
+      if (check.status === 'new') {
+        await rememberPeerKey(user.id, peerId, peerPublicKeyB64);
+        setKeyWarning(null);
+      } else if (check.status === 'changed') {
+        setKeyWarning({
+          fingerprint: check.fingerprint,
+          previousFingerprint: check.previousFingerprint,
+        });
+      } else {
+        setKeyWarning(null);
+      }
+    }
+
+    // nonce берём из исходных строк: после расшифровки конверта в content уже
+    // обычный текст, и replay по нему не отследить.
+    if (peerId) {
+      const nonces = visible
+        .map((m) => envelopeNonce(m.content))
+        .filter((n): n is string => !!n);
+      // Объединяем с уже сохранёнными: у удалённых сообщений конверта больше
+      // нет, но их nonce всё равно должен остаться в списке — иначе повторная
+      // вставка старого шифртекста пройдёт как новое сообщение.
+      const known = await loadSeenNonces(user.id, peerId);
+      for (const n of nonces) known.add(n);
+      seenNoncesRef.current = known;
+      await rememberSeenNonces(user.id, peerId, nonces);
+    }
+
     const loaded = await Promise.all(
-      (data || []).map(async (m) => {
+      visible.map(async (m) => {
+        if (m.deleted_at) {
+          return { ...m, content: null, image_path: null } as Message;
+        }
+
         // Изображение: content — зашифрованный JSON envelope, image_path —
         // ciphertext в storage. Расшифровываем байты и кешируем displayable URI.
         if (m.image_path) {
@@ -208,14 +288,14 @@ export default function Chat() {
           return m;
         }
         if (!privateKey || !peerPublicKeyB64) {
-          return m;
+          return { ...m, content: undecrypted(m.content) };
         }
         try {
           const text = await decryptText(privateKey, peerPublicKeyB64, m.content);
           return { ...m, content: text };
         } catch (e) {
           log.warn('E2EE: не удалось расшифровать сообщение:', e);
-          return m;
+          return { ...m, content: undecrypted(m.content) };
         }
       })
     );
@@ -253,6 +333,20 @@ export default function Chat() {
           const newMessage = payload.new as Message;
           let message = newMessage;
 
+          // Replay: тот же nonce, что уже показывали. Значит, старый
+          // шифртекст вставили повторно — второй раз не показываем.
+          const nonce = envelopeNonce(newMessage.content);
+          if (nonce && seenNoncesRef.current.has(nonce)) {
+            log.warn('E2EE: повторное сообщение (replay) отброшено:', newMessage.id);
+            return;
+          }
+          if (nonce) {
+            seenNoncesRef.current.add(nonce);
+            if (myId && peerId) {
+              void rememberSeenNonces(myId, peerId, [nonce]);
+            }
+          }
+
           let privateKey: Uint8Array | null = null;
           let peerPublicKeyB64: string | null = null;
           try {
@@ -288,9 +382,41 @@ export default function Chat() {
               message = { ...newMessage, content: text };
             } catch (e) {
               log.warn('E2EE: не удалось расшифровать realtime-сообщение:', e);
+              message = { ...newMessage, content: undecrypted(newMessage.content) };
             }
+          } else if (newMessage.content) {
+            message = { ...newMessage, content: undecrypted(newMessage.content) };
           }
           setMessages((prev) => [...prev, message]);
+        }
+      )
+      // Удаление у обоих приходит как UPDATE: content и image_path очищены,
+      // deleted_at заполнен. Сохраняем строку, чтобы показать «Сообщение
+      // удалено» на её месте.
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'messages', filter: `match_id=eq.${matchId}` },
+        (payload) => {
+          const updated = payload.new as Message;
+          setMessages((prev) =>
+            prev.map((m) => {
+              if (m.id !== updated.id) return m;
+              if (updated.deleted_at) {
+                return { ...m, deleted_at: updated.deleted_at, content: null, image_path: null };
+              }
+              return { ...m, read_at: updated.read_at };
+            })
+          );
+        }
+      )
+      // Жёсткое удаление (например, из панели модерации) — убираем строку.
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'messages', filter: `match_id=eq.${matchId}` },
+        (payload) => {
+          const removed = payload.old as { id?: string };
+          if (!removed?.id) return;
+          setMessages((prev) => prev.filter((m) => m.id !== removed.id));
         }
       )
       .subscribe();
@@ -310,40 +436,125 @@ export default function Chat() {
     }
   }, []);
 
+  // Подтверждение нового ключа собеседника. До этого отправка заблокирована:
+  // иначе можно отправить сообщение на подменённый ключ.
+  async function acceptPeerKey() {
+    if (!myId || !peerId || !peerKeyB64) return;
+    await rememberPeerKey(myId, peerId, peerKeyB64);
+    setKeyWarning(null);
+    await loadMessages();
+  }
+
+  async function removeMessageForMe(item: Message) {
+    try {
+      await deleteMessageForMe(item.id);
+      setMessages((prev) => prev.filter((m) => m.id !== item.id));
+    } catch (e: any) {
+      appAlert.alert('Ошибка', 'Не удалось удалить сообщение: ' + (e?.message ?? ''));
+    }
+  }
+
+  function confirmRemoveForEveryone(item: Message) {
+    appAlert.alert(
+      'Удалить у обоих?',
+      'Сообщение исчезнет у вас и у собеседника. Восстановить его нельзя.',
+      [
+        { text: 'Отмена', style: 'cancel' },
+        {
+          text: 'Удалить',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteMessageForEveryone(item.id, item.image_path);
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === item.id
+                    ? { ...m, content: null, image_path: null, deleted_at: new Date().toISOString() }
+                    : m
+                )
+              );
+            } catch (e: any) {
+              appAlert.alert('Ошибка', 'Не удалось удалить сообщение: ' + (e?.message ?? ''));
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  function handleMessageActions(item: Message) {
+    if (item.deleted_at) return;
+    const isMine = item.sender_id === myId;
+
+    appAlert.alert('Сообщение', 'Что сделать с сообщением?', [
+      ...(isMine
+        ? [
+            {
+              text: 'Удалить у обоих',
+              style: 'destructive' as const,
+              onPress: () => confirmRemoveForEveryone(item),
+            },
+          ]
+        : []),
+      {
+        text: 'Удалить у себя',
+        style: 'destructive' as const,
+        onPress: () => removeMessageForMe(item),
+      },
+      { text: 'Отмена', style: 'cancel' as const },
+    ]);
+  }
+
   async function handleSend() {
-    if (!text.trim() || !myId) return;
+    if (!text.trim() || !myId || sendingRef.current) return;
+
+    if (keyWarning) {
+      appAlert.alert(
+        'Ключ собеседника изменился',
+        `Новый отпечаток: ${keyWarning.fingerprint}.\n\nЕсли собеседник переустановил приложение или вышел и вошёл заново — это ожидаемо. Сверьте отпечаток по другому каналу связи. Пока ключ не подтверждён, отправка заблокирована.`,
+        [
+          { text: 'Отмена', style: 'cancel' },
+          { text: 'Принять ключ', onPress: () => acceptPeerKey() },
+        ]
+      );
+      return;
+    }
+
+    sendingRef.current = true;
     setSending(true);
 
     const content = text.trim();
     setText('');
 
-    const session = await prepareSendSession(myId, peerId);
-    if (!session.ok) {
-      setText(content);
-      setSending(false);
-      log.warn('E2EE: не удалось подготовить сессию шифрования:', session.cause ?? session.message);
-      if (session.needsKeyReset) {
-        // Ключ остался от старой установки: предлагаем заменить и повторить
-        // отправку. Текст уже возвращён в поле, поэтому handleSend() заново
-        // возьмёт то же содержимое.
-        offerKeyReset(myId, session.message, () => handleSend());
-      } else {
-        appAlert.alert(session.title, session.message);
+    try {
+      const session = await prepareSendSession(myId, peerId);
+      if (!session.ok) {
+        setText(content);
+        log.warn('E2EE: не удалось подготовить сессию шифрования:', session.cause ?? session.message);
+        if (session.needsKeyReset) {
+          // Ключ остался от старой установки: предлагаем заменить и повторить
+          // отправку. Текст уже возвращён в поле, поэтому handleSend() заново
+          // возьмёт то же содержимое.
+          offerKeyReset(myId, session.message, () => handleSend());
+        } else {
+          appAlert.alert(session.title, session.message);
+        }
+        return;
       }
-      return;
-    }
-    const payload = await encryptText(session.privateKey, session.peerPublicKeyB64, content);
-    const { error } = await supabase.from('messages').insert({
-      match_id: matchId,
-      sender_id: myId,
-      content: JSON.stringify(payload),
-    });
+      const payload = await encryptText(session.privateKey, session.peerPublicKeyB64, content);
+      const result = await sendEncryptedMessage({
+        matchId,
+        senderId: myId,
+        payload,
+      });
 
-    setSending(false);
-
-    if (error) {
-      appAlert.alert('Ошибка', 'Не удалось отправить сообщение.');
-      setText(content); // возвращаем текст в поле, чтобы не потерять
+      if (!result.ok) {
+        appAlert.alert('Ошибка', 'Не удалось отправить сообщение.');
+        setText(content); // возвращаем текст в поле, чтобы не потерять
+      }
+    } finally {
+      sendingRef.current = false;
+      setSending(false);
     }
   }
 
@@ -389,13 +600,13 @@ export default function Chat() {
         session.privateKey,
         session.peerPublicKeyB64
       );
-      const { error } = await supabase.from('messages').insert({
-        match_id: matchId,
-        sender_id: myId,
-        image_path: path,
-        content: JSON.stringify(payload),
+      const result = await sendEncryptedMessage({
+        matchId,
+        senderId: myId,
+        payload,
+        imagePath: path,
       });
-      if (error) throw new Error(error.message);
+      if (!result.ok) throw new Error(result.error);
       const displayUri = await writeDecryptedImage(bytes, format.mimeType, path);
       setDecryptedImages((prev) => ({ ...prev, [path]: displayUri }));
     } catch (e: any) {
@@ -487,6 +698,19 @@ export default function Chat() {
       keyboardVerticalOffset={90}
     >
       <View style={styles.header}>
+        {!isSupport && peerFingerprint && (
+          <TouchableOpacity
+            onPress={() =>
+              appAlert.alert(
+                'Проверка ключа',
+                `Отпечаток ключа собеседника:\n${peerFingerprint}\n\nЕсли он совпадает с тем, что собеседник видит у себя, ключ не подменяли. Смена отпечатка означает переустановку приложения или новое устройство.`
+              )
+            }
+            style={styles.headerButton}
+          >
+            <Text style={styles.headerButtonText}>Ключ</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity onPress={handleReport} style={styles.headerButton}>
           <Text style={styles.headerButtonText}>Пожаловаться</Text>
         </TouchableOpacity>
@@ -496,6 +720,20 @@ export default function Chat() {
           </TouchableOpacity>
         )}
       </View>
+
+      {keyWarning && (
+        <View style={styles.keyWarning}>
+          <Text style={styles.keyWarningTitle}>Ключ собеседника изменился</Text>
+          <Text style={styles.keyWarningText}>
+            Новый отпечаток: {keyWarning.fingerprint}. Старые сообщения этим ключом не
+            расшифровываются. Если собеседник переустанавливал приложение или выходил из
+            аккаунта — это ожидаемо. Сверьте отпечаток по другому каналу связи.
+          </Text>
+          <TouchableOpacity onPress={acceptPeerKey} style={styles.keyWarningButton}>
+            <Text style={styles.keyWarningButtonText}>Принять новый ключ</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <FlatList
         ref={listRef}
@@ -523,8 +761,10 @@ export default function Chat() {
             )
           ) : null;
 
+          const deleted = !!item.deleted_at;
+
           let bubble: React.ReactNode;
-          if (item.image_path) {
+          if (item.image_path && !deleted) {
             const url = item.image_path ? decryptedImages[item.image_path] ?? imageUrls[item.image_path] : null;
             bubble = (
               <View style={[styles.bubble, styles.imageBubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}>
@@ -546,12 +786,24 @@ export default function Chat() {
           } else {
             bubble = (
               <View style={[styles.bubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}>
-                <Text style={isMine ? styles.bubbleTextMine : styles.bubbleTextTheirs}>
+                <Text
+                  style={
+                    deleted
+                      ? styles.deletedText
+                      : isMine
+                        ? styles.bubbleTextMine
+                        : styles.bubbleTextTheirs
+                  }
+                >
                   {/* content — колонка text, но после сбоя расшифровки или
                       неожиданного ответа сервера там может оказаться не
                       строка. <Text> с объектом роняет дерево React, и вся
                       страница становится пустой. */}
-                  {typeof item.content === 'string' ? item.content : ''}
+                  {deleted
+                    ? 'Сообщение удалено'
+                    : typeof item.content === 'string'
+                      ? item.content
+                      : ''}
                 </Text>
               </View>
             );
@@ -560,7 +812,14 @@ export default function Chat() {
           return (
             <View style={[styles.messageRow, isMine && styles.messageRowMine]}>
               {!isMine && (avatar ?? <View style={styles.messageAvatarSpacer} />)}
-              {bubble}
+              <TouchableOpacity
+                activeOpacity={0.85}
+                disabled={deleted}
+                delayLongPress={350}
+                onLongPress={() => handleMessageActions(item)}
+              >
+                {bubble}
+              </TouchableOpacity>
             </View>
           );
         }}
@@ -617,6 +876,19 @@ const styles = StyleSheet.create({
   headerButton: { marginLeft: 16 },
   headerButtonText: { fontSize: 13, color: colors.textSecondary },
   blockText: { color: colors.danger },
+  keyWarning: {
+    margin: 10,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.danger,
+    backgroundColor: 'rgba(255, 59, 48, 0.08)',
+  },
+  keyWarningTitle: { color: colors.danger, fontWeight: '700', fontSize: 14, marginBottom: 6 },
+  keyWarningText: { color: colors.textSecondary, fontSize: 13, lineHeight: 18 },
+  keyWarningButton: { alignSelf: 'flex-start', marginTop: 10, paddingVertical: 6 },
+  keyWarningButtonText: { color: colors.accent, fontWeight: '600', fontSize: 14 },
+  deletedText: { color: colors.textMuted, fontSize: 15, fontStyle: 'italic' },
   messageList: { padding: 14, flexGrow: 1 },
   messageRow: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 8 },
   messageRowMine: { justifyContent: 'flex-end' },

@@ -629,6 +629,10 @@ commit;
 | `20261118000000_admin_profiles_rpc.sql` | `admin_profiles()` и `admin_profile_names()` — чтение анкет панелью модерации через `SECURITY DEFINER` с проверкой `private.is_admin()` | применён |
 | `20261118000001_private_schema_grants.sql` | `USAGE` на схему `private` и `EXECUTE` на `private.is_admin()` для `authenticated` | применён |
 
+E2EE-переписка проверена отдельно: `docs/compliance/e2ee-audit-2026-11-13.md`
+(хранение ключей, восстановление, replay, смена ключа, уведомления, удаление
+сообщений).
+
 ### Почему понадобились шаги 7–10 и 12
 
 На рабочей базе обнаружены следы `ROLLBACK_20260926000000.sql`: он вернул

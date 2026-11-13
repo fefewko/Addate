@@ -17,16 +17,16 @@
 //     сохраняется локально и публикуется в профиле.
 //
 // Пароль никогда не сохраняется. Выведенный из него ключ кешируется в
-// AsyncStorage: он нужен, чтобы после замены ключа (resetIdentity) обновить
-// резервную копию без повторного ввода пароля. Риск не увеличивается —
-// приватный ключ и так лежит на устройстве в открытом виде.
+// защищённом хранилище ОС (Keychain/Keystore): он нужен, чтобы после замены
+// ключа (resetIdentity) обновить резервную копию без повторного ввода пароля.
+// Риск не увеличивается — приватный ключ и так лежит на устройстве.
 //
 // Ограничение: если пароль изменён вне приложения (например, через службу
 // восстановления Supabase), старая копия этим паролем уже не откроется. При
 // следующем входе на устройстве, где ключ на месте, копия перезаписывается
 // новым паролем.
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getSecret, setSecret, deleteSecret } from './secureStorage';
 import { getNacl, getLocalPrivateKey, setLocalPrivateKey, getPublicKey, savePublicKey, publicKeyFromSecretKey, ensureIdentity } from './e2ee';
 import { base64ToBytes, bytesToBase64, utf8ToBytes } from './encoding';
 import { supabase } from './supabase';
@@ -194,12 +194,14 @@ async function cacheBackupKey(
     salt,
     iterations,
   };
-  await AsyncStorage.setItem(cachedKeyStorageKey(userId), JSON.stringify(cached));
+  // KEK — такой же секрет, как приватный ключ: с ним открывается резервная
+  // копия. Поэтому он тоже уходит в Keychain/Keystore, а не в AsyncStorage.
+  await setSecret(cachedKeyStorageKey(userId), JSON.stringify(cached));
 }
 
 async function readCachedBackupKey(userId: string): Promise<CachedBackupKey | null> {
   try {
-    const raw = await AsyncStorage.getItem(cachedKeyStorageKey(userId));
+    const raw = await getSecret(cachedKeyStorageKey(userId));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as CachedBackupKey;
     if (!parsed?.kek || !parsed?.salt || !parsed?.iterations) return null;
@@ -210,9 +212,18 @@ async function readCachedBackupKey(userId: string): Promise<CachedBackupKey | nu
   }
 }
 
+async function clearCachedBackupKey(userId: string): Promise<void> {
+  await deleteSecret(cachedKeyStorageKey(userId));
+}
+
 // ---------------------------------------------------------------------------
 // Хранилище на сервере
 // ---------------------------------------------------------------------------
+
+/** Есть ли на сервере резервная копия ключа (нужно для предупреждений). */
+export async function hasKeyBackup(userId: string): Promise<boolean> {
+  return (await fetchBackupRow(userId)) !== null;
+}
 
 async function fetchBackupRow(userId: string): Promise<string | null> {
   const { data, error } = await supabase
@@ -498,6 +509,7 @@ export async function refreshKeyBackupAfterReset(userId: string): Promise<void> 
   const cached = await readCachedBackupKey(userId);
   if (!cached) {
     await deleteBackup(userId);
+    await clearCachedBackupKey(userId);
     return;
   }
 

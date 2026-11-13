@@ -3,10 +3,11 @@ import React, { useState } from 'react';
 import type { RootNavigation } from '../lib/navigation';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { appAlert } from '../lib/alert';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../lib/supabase';
 import { loginWithTelegram } from '../lib/telegramAuth';
-import { syncKeyBackup } from '../lib/keyBackup';
+import { syncKeyBackup, hasKeyBackup } from '../lib/keyBackup';
 import { log } from '../lib/log';
 import { colors } from '../lib/theme';
 
@@ -98,6 +99,11 @@ export default function SignIn() {
           'Ключ шифрования восстановлен',
           'История переписки снова доступна на этом устройстве.'
         );
+      } else if (backupResult === 'failed') {
+        appAlert.alert(
+          'Не удалось восстановить ключ',
+          'Резервная копия ключа не открылась паролем. Если пароль меняли вне приложения (например, через восстановление доступа), копия осталась от старого пароля. Отправка сообщений предложит заменить ключ — после этого новая переписка заработает, но старые сообщения прочитать не получится.'
+        );
       }
     } catch (e) {
       log.warn('Резервная копия ключа: ', e);
@@ -137,6 +143,22 @@ export default function SignIn() {
     if (!user) {
       appAlert.alert('Ошибка', 'Не удалось получить данные пользователя после входа.');
       return;
+    }
+
+    // Вход через Telegram не даёт пароля, из которого можно вывести ключ
+    // резервной копии. Если копии нет — честно предупреждаем один раз, что
+    // при смене устройства история переписки будет потеряна.
+    try {
+      const warnedKey = `e2ee:noBackupWarned:${user.id}`;
+      if (!(await AsyncStorage.getItem(warnedKey)) && !(await hasKeyBackup(user.id))) {
+        await AsyncStorage.setItem(warnedKey, '1');
+        appAlert.alert(
+          'Ключ только на этом устройстве',
+          'При входе через Telegram пароль не задаётся, поэтому резервная копия ключа переписки не создаётся. При переустановке приложения или смене устройства старые сообщения прочитать не получится.'
+        );
+      }
+    } catch (e) {
+      log.warn('Не удалось проверить резервную копию ключа после входа через Telegram:', e);
     }
 
     await routeAfterLogin(user.id);

@@ -20,10 +20,10 @@
 // байт) + ciphertext, nonce — 24 байта. Ключи и уже сохранённые сообщения
 // остаются читаемыми.
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import nacl from 'tweetnacl';
 import * as Crypto from 'expo-crypto';
 import { supabase } from './supabase';
+import { getSecret, setSecret } from './secureStorage';
 import { base64ToBytes, bytesToBase64, bytesToUtf8, utf8ToBytes } from './encoding';
 
 export type E2EEPayload = {
@@ -57,8 +57,10 @@ export function getNacl(): typeof nacl {
   return nacl;
 }
 
+// Приватный ключ хранится в защищённом хранилище ОС (Keychain/Keystore), а не
+// в AsyncStorage. Старое значение из AsyncStorage переносится при первом чтении.
 export async function getLocalPrivateKey(userId: string): Promise<Uint8Array | null> {
-  const stored = await AsyncStorage.getItem(privateKeyKey(userId));
+  const stored = await getSecret(privateKeyKey(userId));
   if (!stored) {
     return null;
   }
@@ -68,7 +70,7 @@ export async function getLocalPrivateKey(userId: string): Promise<Uint8Array | n
 // Заменяет локальный приватный ключ. Нужно резервной копии (keyBackup.ts),
 // которая восстанавливает ключ после переустановки приложения.
 export async function setLocalPrivateKey(userId: string, privateKey: Uint8Array): Promise<void> {
-  await AsyncStorage.setItem(privateKeyKey(userId), bytesToBase64(privateKey));
+  await setSecret(privateKeyKey(userId), bytesToBase64(privateKey));
 }
 
 // Публичный ключ (base64), соответствующий приватному.
