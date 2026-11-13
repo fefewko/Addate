@@ -574,25 +574,32 @@ $$;
 
 
 -- ===========================================================================
--- ШАГ 7. profiles: отозвать чтение координат (выполнять сразу)
+-- ШАГ 7. profiles: снять табличный SELECT и чтение координат (выполнять сразу)
 -- ===========================================================================
 --
--- Проблема: 20260926000000 отзывал колоночный SELECT на latitude/longitude,
--- но 20261116000001 перечислял чувствительные колонки заново и координаты
--- в список не включил. Гранты из 20260926000000 остались в силе, поэтому
--- authenticated читал точные координаты всех анкет обычным запросом
--- в обход nearby_profiles(). Проверка:
---   has_column_privilege('authenticated','public.profiles','latitude','SELECT') = true
+-- Проблема: на базе у authenticated был ТАБЛИЧНЫЙ SELECT на profiles. Табличная
+-- привилегия перекрывает колоночную, поэтому отзыв одной latitude/longitude
+-- ничего не давал: точные координаты всех анкет читались обычным запросом
+-- в обход nearby_profiles().
+--
+-- Похоже, по базе прогоняли ROLLBACK_20260926000000.sql: он делает
+-- GRANT SELECT ON public.profiles TO authenticated и DROP FUNCTION my_location().
+-- Поэтому сначала снимаем табличный SELECT, а в шаге 8 возвращаем колоночный
+-- белый список.
 --
 -- Клиент координаты не читает: только пишет в Feed.tsx и Settings.tsx.
--- Свои координаты отдаёт SECURITY DEFINER-функция my_location().
 
 BEGIN;
 
+REVOKE SELECT ON public.profiles FROM PUBLIC, anon, authenticated;
 REVOKE SELECT (latitude, longitude) ON public.profiles FROM PUBLIC, anon, authenticated;
 
 DO $$
 BEGIN
+  IF has_table_privilege('authenticated','public.profiles','SELECT') THEN
+    RAISE EXCEPTION 'Шаг 7: у authenticated остался табличный SELECT на profiles.';
+  END IF;
+
   IF has_column_privilege('authenticated','public.profiles','latitude','SELECT')
      OR has_column_privilege('authenticated','public.profiles','longitude','SELECT')
      OR has_column_privilege('anon','public.profiles','latitude','SELECT') THEN
@@ -612,7 +619,123 @@ COMMIT;
 
 
 -- ===========================================================================
--- ШАГ 8. profiles: отозвать чтение moderation_note
+-- ШАГ 8. profiles: вернуть колоночный белый список, my_location(), nearby_profiles()
+-- ===========================================================================
+--
+-- Проблема: после шага 7 у authenticated не осталось вообще никакого чтения
+-- profiles. Приложение читает оттуда только public_key (E2EE),
+-- moderation_status/moderation_note (экран модерации) и флаги приватности.
+-- Всё содержимое анкеты идёт через profile_cards / my_profile() / feed_profiles().
+--
+-- Заодно восстанавливаем my_location(): её в базе нет, а без неё приложение
+-- не знает свои координаты и не показывает расстояние. nearby_profiles()
+-- пересоздаём на случай, если откат вернул её в режим invoker — после отзыва
+-- табличного SELECT такая версия не смогла бы прочитать координаты.
+
+BEGIN;
+
+GRANT SELECT (
+  id,
+  is_admin,
+  moderation_status,
+  moderation_note,
+  created_at,
+  updated_at,
+  public_key,
+  profile_visible,
+  profile_hidden,
+  show_age,
+  show_city,
+  show_sobriety_since,
+  show_substance_type,
+  show_photos,
+  show_online_status,
+  show_last_active
+) ON public.profiles TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.my_location()
+RETURNS TABLE (latitude double precision, longitude double precision)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  select p.latitude, p.longitude
+  from public.profiles p
+  where p.id = auth.uid();
+$$;
+
+COMMENT ON FUNCTION public.my_location() IS
+  'Координаты текущего пользователя. Нужна потому, что latitude/longitude '
+  'исключены из SELECT-гранта authenticated, чтобы чужие координаты нельзя '
+  'было прочитать обычным запросом.';
+
+REVOKE ALL ON FUNCTION public.my_location() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.my_location() TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.nearby_profiles(
+  viewer_lat double precision,
+  viewer_lng double precision
+)
+RETURNS TABLE (profile_id uuid, distance_km double precision)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  select p.id as profile_id,
+         6371.0088 * 2 * asin(least(1.0::double precision, sqrt(
+           power(sin(radians(p.latitude - viewer_lat) / 2), 2)
+           + cos(radians(viewer_lat)) * cos(radians(p.latitude))
+             * power(sin(radians(p.longitude - viewer_lng) / 2), 2)
+         ))) as distance_km
+  from public.profiles p
+  where p.moderation_status = 'approved'
+    and not p.profile_hidden
+    and p.latitude is not null
+    and p.longitude is not null
+    and (auth.uid() is null or p.id <> auth.uid());
+$$;
+
+COMMENT ON FUNCTION public.nearby_profiles(double precision, double precision) IS
+  'Расстояние в километрах от точки просмотра до всех одобренных анкет. '
+  'Возвращает только расстояние — точные координаты чужих анкет недоступны '
+  'на уровне SELECT-гранта.';
+
+REVOKE ALL ON FUNCTION public.nearby_profiles(double precision, double precision)
+  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.nearby_profiles(double precision, double precision)
+  TO authenticated;
+
+DO $$
+BEGIN
+  IF has_table_privilege('authenticated','public.profiles','SELECT') THEN
+    RAISE EXCEPTION 'Шаг 8: вернулся табличный SELECT на profiles.';
+  END IF;
+
+  IF has_column_privilege('authenticated','public.profiles','latitude','SELECT') THEN
+    RAISE EXCEPTION 'Шаг 8: координаты снова читаются напрямую.';
+  END IF;
+
+  IF NOT has_column_privilege('authenticated','public.profiles','public_key','SELECT')
+     OR NOT has_column_privilege('authenticated','public.profiles','moderation_status','SELECT')
+     OR NOT has_column_privilege('authenticated','public.profiles','show_photos','SELECT') THEN
+    RAISE EXCEPTION 'Шаг 8: колоночный белый список выдан не полностью.';
+  END IF;
+
+  IF NOT has_function_privilege('authenticated','public.my_location()','EXECUTE') THEN
+    RAISE EXCEPTION 'Шаг 8: authenticated не может вызвать my_location().';
+  END IF;
+END;
+$$;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
+
+
+-- ===========================================================================
+-- ШАГ 9. profiles: отозвать чтение moderation_note
 -- ===========================================================================
 --
 -- Проблема: moderation_note остаётся в колоночном SELECT-гранте authenticated.
@@ -630,11 +753,11 @@ REVOKE SELECT (moderation_note) ON public.profiles FROM PUBLIC, anon, authentica
 DO $$
 BEGIN
   IF has_column_privilege('authenticated','public.profiles','moderation_note','SELECT') THEN
-    RAISE EXCEPTION 'Шаг 8: moderation_note всё ещё читается напрямую.';
+    RAISE EXCEPTION 'Шаг 9: moderation_note всё ещё читается напрямую.';
   END IF;
 
   IF NOT has_function_privilege('authenticated','public.my_profile()','EXECUTE') THEN
-    RAISE EXCEPTION 'Шаг 8: authenticated не может вызвать my_profile().';
+    RAISE EXCEPTION 'Шаг 9: authenticated не может вызвать my_profile().';
   END IF;
 END;
 $$;
