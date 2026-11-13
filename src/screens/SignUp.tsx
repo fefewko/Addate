@@ -80,18 +80,21 @@ export default function SignUp() {
     const userId = data.user?.id;
     if (!userId) { setError('Не удалось получить данные пользователя. Попробуйте войти вручную.'); setLoading(false); return; }
 
-    const { error: profileError } = await supabase.from('profiles').update({
-      birth_date: birthDate,
-      terms_accepted_at: new Date().toISOString(),
-      terms_version: TERMS_VERSION,
-      privacy_accepted_at: new Date().toISOString(),
-      privacy_version: PRIVACY_VERSION,
-      special_data_consent_at: new Date().toISOString(),
-      special_data_consent_version: SPECIAL_DATA_VERSION,
-    }).eq('id', userId);
+    // В profiles пишем только дату рождения. Согласия хранятся отдельно,
+    // дату и версию документа фиксирует сервер в accept_documents().
+    const { error: profileError } = await supabase.from('profiles')
+      .update({ birth_date: birthDate })
+      .eq('id', userId);
+    if (profileError) log.warn('Ошибка сохранения даты рождения:', profileError.message);
+
+    const { error: consentError } = await supabase.rpc('accept_documents', {
+      p_terms_version: TERMS_VERSION,
+      p_privacy_version: PRIVACY_VERSION,
+      p_special_data_version: SPECIAL_DATA_VERSION,
+    });
+    if (consentError) log.warn('Ошибка сохранения согласий:', consentError.message);
 
     setLoading(false);
-    if (profileError) log.warn('Ошибка сохранения профиля/согласий:', profileError.message);
 
     // Сразу создаём резервную копию ключа: пароль известен только здесь и на
     // экране входа, а без копии переустановка снова означала бы потерю ключа.
