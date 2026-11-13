@@ -571,3 +571,74 @@ BEGIN
   RAISE NOTICE 'Все проверки пройдены: миграция применена полностью.';
 END;
 $$;
+
+
+-- ===========================================================================
+-- ШАГ 7. profiles: отозвать чтение координат (выполнять сразу)
+-- ===========================================================================
+--
+-- Проблема: 20260926000000 отзывал колоночный SELECT на latitude/longitude,
+-- но 20261116000001 перечислял чувствительные колонки заново и координаты
+-- в список не включил. Гранты из 20260926000000 остались в силе, поэтому
+-- authenticated читал точные координаты всех анкет обычным запросом
+-- в обход nearby_profiles(). Проверка:
+--   has_column_privilege('authenticated','public.profiles','latitude','SELECT') = true
+--
+-- Клиент координаты не читает: только пишет в Feed.tsx и Settings.tsx.
+-- Свои координаты отдаёт SECURITY DEFINER-функция my_location().
+
+BEGIN;
+
+REVOKE SELECT (latitude, longitude) ON public.profiles FROM PUBLIC, anon, authenticated;
+
+DO $$
+BEGIN
+  IF has_column_privilege('authenticated','public.profiles','latitude','SELECT')
+     OR has_column_privilege('authenticated','public.profiles','longitude','SELECT')
+     OR has_column_privilege('anon','public.profiles','latitude','SELECT') THEN
+    RAISE EXCEPTION 'Шаг 7: координаты всё ещё читаются напрямую.';
+  END IF;
+
+  -- Запись координат нужна: её делают Feed.tsx и Settings.tsx.
+  IF NOT has_column_privilege('authenticated','public.profiles','latitude','UPDATE') THEN
+    RAISE EXCEPTION 'Шаг 7: authenticated потерял право записи координат.';
+  END IF;
+END;
+$$;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
+
+
+-- ===========================================================================
+-- ШАГ 8. profiles: отозвать чтение moderation_note
+-- ===========================================================================
+--
+-- Проблема: moderation_note остаётся в колоночном SELECT-гранте authenticated.
+-- Политика «Просмотр одобренных анкет» отдаёт чужие строки, поэтому любой
+-- пользователь может прочитать заметки модератора о других людях.
+--
+-- ВАЖНО: применять только ПОСЛЕ установки сборки, где ModerationPending
+-- читает статус через my_profile(), иначе экран модерации в старом APK
+-- покажет ошибку. my_profile() — SECURITY DEFINER, отзыв её не затрагивает.
+
+BEGIN;
+
+REVOKE SELECT (moderation_note) ON public.profiles FROM PUBLIC, anon, authenticated;
+
+DO $$
+BEGIN
+  IF has_column_privilege('authenticated','public.profiles','moderation_note','SELECT') THEN
+    RAISE EXCEPTION 'Шаг 8: moderation_note всё ещё читается напрямую.';
+  END IF;
+
+  IF NOT has_function_privilege('authenticated','public.my_profile()','EXECUTE') THEN
+    RAISE EXCEPTION 'Шаг 8: authenticated не может вызвать my_profile().';
+  END IF;
+END;
+$$;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;

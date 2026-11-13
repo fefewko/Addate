@@ -46,11 +46,7 @@ export default function ModerationPending() {
 
     setUserId(user.id);
 
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('moderation_status, moderation_note')
-      .eq('id', user.id)
-      .maybeSingle();
+    const { data, error } = await supabase.rpc('my_profile');
 
     setLoading(false);
 
@@ -60,15 +56,20 @@ export default function ModerationPending() {
       setLoadError('Не удалось загрузить статус модерации: ' + error.message);
       return;
     }
-    if (!data) {
+
+    const row = (Array.isArray(data) ? data[0] : data) as
+      | { moderation_status: string; moderation_note: string | null }
+      | undefined;
+
+    if (!row) {
       setLoadError('Анкета не найдена.');
       return;
     }
 
-    setStatus(data.moderation_status as Status);
-    setNote(data.moderation_note);
+    setStatus(row.moderation_status as Status);
+    setNote(row.moderation_note);
 
-    if (data.moderation_status === 'approved') {
+    if (row.moderation_status === 'approved') {
       setTimeout(() => {
         navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
       }, 800);
