@@ -765,3 +765,113 @@ $$;
 NOTIFY pgrst, 'reload schema';
 
 COMMIT;
+
+
+-- ===========================================================================
+-- ШАГ 10. messages и matches: колоночные права, лайк себе, чтение переписки
+-- ===========================================================================
+--
+-- Проблема: у authenticated оставался UPDATE уровня таблицы на messages и
+-- matches, поэтому в своей паре можно было переписать user_a/user_b, а в
+-- сообщении — content и image_path. Плюс anon имел полный набор прав на обе
+-- таблицы, включая TRUNCATE, который RLS не подчиняется.
+--
+-- Политика чтения сообщений не проверяла статус пары: переписку «ожидающих»
+-- совпадений можно было прочитать.
+--
+-- Клиент пишет в matches только status и matched_at, в messages — только
+-- read_at (проверено по src/lib/matches.ts, src/lib/support.ts,
+-- src/screens/Feed.tsx, IncomingLikes.tsx, Chat.tsx, AllUsers.tsx).
+
+BEGIN;
+
+-- messages: писать можно только read_at
+REVOKE ALL ON public.messages FROM anon;
+REVOKE UPDATE, TRUNCATE, REFERENCES, TRIGGER ON public.messages FROM authenticated;
+GRANT UPDATE (read_at) ON public.messages TO authenticated;
+
+-- matches: писать можно только status и matched_at
+REVOKE ALL ON public.matches FROM anon;
+REVOKE UPDATE, TRUNCATE, REFERENCES, TRIGGER ON public.matches FROM authenticated;
+GRANT UPDATE (status, matched_at) ON public.matches TO authenticated;
+
+-- лайк самому себе
+CREATE OR REPLACE FUNCTION public.prevent_self_match()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+BEGIN
+  IF new.user_a = new.user_b THEN
+    RAISE EXCEPTION 'Нельзя поставить лайк самому себе'
+      USING errcode = '23514';
+  END IF;
+  RETURN new;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS no_self_match ON public.matches;
+
+CREATE TRIGGER no_self_match
+  BEFORE INSERT ON public.matches
+  FOR EACH ROW
+  EXECUTE FUNCTION public.prevent_self_match();
+
+-- переписка читается только по подтверждённому совпадению
+DROP POLICY IF EXISTS "Сообщения своего совпадения" ON public.messages;
+
+CREATE POLICY "Сообщения своего совпадения"
+  ON public.messages
+  FOR SELECT
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.matches m
+      WHERE m.id = messages.match_id
+        AND m.status = 'matched'
+        AND (auth.uid() = m.user_a OR auth.uid() = m.user_b)
+    )
+  );
+
+DO $$
+BEGIN
+  IF has_table_privilege('authenticated','public.messages','UPDATE')
+     OR has_table_privilege('authenticated','public.matches','UPDATE') THEN
+    RAISE EXCEPTION 'Шаг 10: остался табличный UPDATE на messages/matches.';
+  END IF;
+
+  IF NOT has_column_privilege('authenticated','public.messages','read_at','UPDATE') THEN
+    RAISE EXCEPTION 'Шаг 10: нет UPDATE на messages.read_at — не получится отмечать прочитанное.';
+  END IF;
+
+  IF NOT has_column_privilege('authenticated','public.matches','status','UPDATE') THEN
+    RAISE EXCEPTION 'Шаг 10: нет UPDATE на matches.status.';
+  END IF;
+
+  IF has_table_privilege('anon','public.messages','SELECT')
+     OR has_table_privilege('anon','public.matches','SELECT') THEN
+    RAISE EXCEPTION 'Шаг 10: у anon остались права на messages/matches.';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgname = 'no_self_match' AND (tgtype & 4) = 4
+  ) THEN
+    RAISE EXCEPTION 'Шаг 10: триггер no_self_match не создан.';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'messages'
+      AND policyname = 'Сообщения своего совпадения'
+      AND qual LIKE '%matched%'
+  ) THEN
+    RAISE EXCEPTION 'Шаг 10: политика чтения сообщений не проверяет status = matched.';
+  END IF;
+END;
+$$;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
