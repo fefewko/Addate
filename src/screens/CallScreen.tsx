@@ -83,6 +83,13 @@ export default function CallScreen() {
         },
       });
 
+      if (!params.outgoing) {
+        // Каллата обязан быть подписан на rtc-call-<matchId> ДО получения offer,
+        // иначе broadcast-сигнал потеряется. Вызываем ensureChannel при открытии
+        // экрана входящего звонка (пользователь может нажать «принять» в любой момент).
+        void call.ensureChannel();
+      }
+
       if (params.outgoing) {
         try {
           await call.start();
@@ -113,6 +120,17 @@ export default function CallScreen() {
     const call = callRef.current;
     if (!call) return;
     await call.endCall();
+  };
+
+  const accept = async () => {
+    const call = callRef.current;
+    if (!call) return;
+    try {
+      await call.accept();
+    } catch (e) {
+      setError('Не удалось принять звонок: ' + errorMessage(e));
+      setState('failed');
+    }
   };
 
   const decline = async () => {
@@ -167,7 +185,7 @@ export default function CallScreen() {
               <TouchableOpacity style={styles.actionButton} onPress={() => void decline()} accessibilityRole="button">
                 <Ionicons name="close" size={30} color={colors.white} />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.actionButton} onPress={() => void hangup()} accessibilityRole="button">
+              <TouchableOpacity style={styles.actionButton} onPress={() => void accept()} accessibilityRole="button">
                 <Ionicons name="checkmark" size={30} color={colors.white} />
               </TouchableOpacity>
             </>

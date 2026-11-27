@@ -41,6 +41,8 @@ type SignalMessage = {
   to: string;
   sdp?: string;
   candidate?: string;
+  sdpMid?: string;
+  sdpMLineIndex?: number;
 };
 
 const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
@@ -63,6 +65,7 @@ export class EncryptedCall {
   private pendingOffer: any = null;
   muted = false;
   private handlers: EncryptedCallHandlers = {};
+  private byeSent = false;
 
   constructor(params: EncryptedCallParams & { myId: string }) {
     this.matchId = params.matchId;
@@ -94,7 +97,7 @@ export class EncryptedCall {
     }
   }
 
-  private async ensureChannel(): Promise<void> {
+  async ensureChannel(): Promise<void> {
     if (this.channel) return;
     const ch = supabase.channel(`rtc-call-${this.matchId}`);
     ch.on('broadcast', { event: 'signal' }, (payload: any) => {
@@ -107,16 +110,18 @@ export class EncryptedCall {
   private async handleSignal(payload: any): Promise<void> {
     const msg: SignalMessage | null = payload?.payload ?? payload?.data ?? payload ?? null;
     if (!msg || typeof msg !== 'object') return;
-    if (msg.callId !== this.callId) return;
-    // Сообщения предназначены не тому участнику.
+    // Защита: сообщение должно быть адресовано мне и отправлено мной не быть.
     if (msg.to !== this.myId || msg.from === this.myId) return;
 
     this.logCall('signal', { kind: msg.kind, from: msg.from });
+    // callId проставляется отправителем; для входящего он приходит в самом сообщении.
     if (msg.callId) this.callId = msg.callId;
 
     if (msg.kind === 'offer') {
       this.pendingOffer = msg;
-      if (this.state === 'idle') void this.startIncoming();
+      // Входящий: переводим в состояние 'incoming', чтобы UI показывал
+      // экран приёма/отказа. Самосогласование делает по нажатию accept().
+      if (this.state === 'idle') this.emitState('incoming');
     } else if (msg.kind === 'answer') {
       await this.handleAnswer(msg);
     } else if (msg.kind === 'ice') {
@@ -138,7 +143,7 @@ export class EncryptedCall {
     const pc = this.pc;
     if (!pc) return;
     try {
-      await pc.addIceCandidate({ candidate: msg.candidate } as any);
+      await pc.addIceCandidate({ candidate: msg.candidate, sdpMid: msg.sdpMid, sdpMLineIndex: msg.sdpMLineIndex } as any);
     } catch (e) {
       log.warn('RTC-CALL: ICE candidate отклонён:', e);
     }
@@ -161,6 +166,8 @@ export class EncryptedCall {
           from: this.myId,
           to: this.peerId,
           candidate: candidate.candidate,
+          sdpMid: candidate.sdpMid,
+          sdpMLineIndex: candidate.sdpMLineIndex,
         });
       }
     };
@@ -192,21 +199,31 @@ export class EncryptedCall {
     this.pc = pc;
 
     const offer: any = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false, voiceActivityDetection: true });
-    await pc.setLocalDescription(offer);
+    await pc.setLocalDescription({ type: offer.type, sdp: offer.sdp });
     const sdp = typeof offer?.toJSON === 'function' ? offer.toJSON() : offer;
     await this.sendSignal({ kind: 'offer', callId: this.callId, from: this.myId, to: this.peerId, sdp });
     this.logCall('offer sent');
   }
 
-  // Каллата: из входящего offer делаем answer и отправляем его вызывающему.
+  // Каллата: приём входящего offer → подготовка к ответу.
+  // Вызывается после нажатия «принять» в UI (или авто-accept при state idle).
+  async accept(): Promise<void> {
+    if (this.state !== 'incoming') {
+      this.emitState('incoming');
+      return;
+    }
+    await this.startIncoming();
+  }
+
   private async startIncoming(): Promise<void> {
+    await this.ensureChannel();
     const pc = await this.setupPeer();
     this.pc = pc;
 
     const offer: any = this.pendingOffer;
-    await pc.setRemoteDescription(offer);
+    await pc.setRemoteDescription({ type: offer.type, sdp: offer.sdp });
     const answer: any = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
+    await pc.setLocalDescription({ type: answer.type, sdp: answer.sdp });
     const sdp = typeof answer?.toJSON === 'function' ? answer.toJSON() : answer;
     await this.sendSignal({ kind: 'answer', callId: this.callId, from: this.myId, to: this.peerId, sdp });
     this.emitState('active');
@@ -214,11 +231,17 @@ export class EncryptedCall {
 
   // Каллата: отклонить входящий звонок.
   async decline(): Promise<void> {
+    this.byeSent = true;
     await this.sendSignal({ kind: 'bye', callId: this.callId, from: this.myId, to: this.peerId });
     await this.endCall();
   }
 
   async endCall(): Promise<void> {
+    const shouldSignalBye = !this.byeSent && (this.state === 'outgoing' || this.state === 'incoming' || this.state === 'active');
+    if (shouldSignalBye) {
+      this.byeSent = true;
+      await this.sendSignal({ kind: 'bye', callId: this.callId, from: this.myId, to: this.peerId });
+    }
     if (this.pc) {
       try {
         this.pc.close();
@@ -242,3 +265,5 @@ export class EncryptedCall {
 export function createEncryptedCall(params: EncryptedCallParams & { myId: string }): EncryptedCall {
   return new EncryptedCall(params);
 }
+
+export type { MediaStream, MediaStreamTrack };
