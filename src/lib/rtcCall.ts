@@ -206,7 +206,7 @@ export class EncryptedCall {
   }
 
   // Каллата: приём входящего offer → подготовка к ответу.
-  // Вызывается после нажатия «принять» в UI (или авто-accept при state idle).
+  // Вызывается после нажатия «принять» в UI (кнопка в CallScreen).
   async accept(): Promise<void> {
     if (this.state !== 'incoming') {
       this.emitState('incoming');
