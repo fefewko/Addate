@@ -250,6 +250,7 @@ function QuickChatModal({
   onClose: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<RootNavigation>();
   const [messages, setMessages] = useState<Message[]>([]);
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
   const [decryptedImages, setDecryptedImages] = useState<Record<string, string>>({});
@@ -699,9 +700,23 @@ function QuickChatModal({
       >
         <View style={styles.quickChatHeader}>
           <Text style={styles.quickChatTitle}>{otherName || 'Чат'}</Text>
-          <TouchableOpacity onPress={onClose} style={{ padding: 4 }}>
-            <Ionicons name="close" size={26} color={colors.textPrimary} />
-          </TouchableOpacity>
+          <View style={styles.quickChatHeaderActions}>
+            {/* Кнопка E2EE-звонка: открывает CallScreen с outgoing=true. */}
+            <TouchableOpacity
+              onPress={() => {
+                if (!myId || !matchId || !recipientId) return;
+                navigation.navigate('Call', { matchId, peerId: recipientId, outgoing: true });
+              }}
+              style={{ padding: 4 }}
+              accessibilityRole="button"
+              accessibilityLabel="Позвонить"
+            >
+              <Ionicons name="call-outline" size={24} color={colors.accent} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onClose} style={{ padding: 4 }}>
+              <Ionicons name="close" size={26} color={colors.textPrimary} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {keyWarning && (
@@ -1390,6 +1405,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
+  quickChatHeaderActions: { flexDirection: 'row', alignItems: 'center' },
   quickChatTitle: { fontSize: 18, fontWeight: '700', color: colors.textPrimary },
   quickChatList: { padding: 14, flexGrow: 1 },
   bubble: { maxWidth: '78%', borderRadius: 14, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 8 },

@@ -29,6 +29,8 @@ export type RootParamList = {
   // стеке под ней. Нужен, чтобы «Написать сообщение» возвращало к открытому
   // чату, а не открывало второй Chat поверх первого.
   ProfileDetail: { profileId: string; fromChat?: boolean };
+  // Звонок E2EE между участниками чата.
+  Call: { matchId: string; peerId?: string; peerName?: string | null; outgoing?: boolean };
   // Поля nullable, потому что приходят прямо из базы: display_name и дата
   // рождения у собеседника могут быть null.
   Chat: {

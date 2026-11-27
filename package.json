@@ -29,6 +29,7 @@
     "react-native-screens": "~4.26.0",
     "react-native-url-polyfill": "^4.0.0",
     "react-native-web": "~0.21.0",
+    "react-native-webrtc": "^155.0.1",
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {

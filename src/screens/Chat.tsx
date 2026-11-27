@@ -100,20 +100,40 @@ export default function Chat() {
       title,
       headerRight: peerProfileId
         ? () => (
-            <TouchableOpacity
-              onPress={() =>
-                navigation.navigate('ProfileDetail', { profileId: peerProfileId, fromChat: true })
-              }
-              accessibilityRole="button"
-              accessibilityLabel="Открыть анкету"
-              style={{ paddingHorizontal: 12, paddingVertical: 4 }}
-            >
-              {peerPhoto ? (
-                <Image source={{ uri: peerPhoto }} style={styles.headerAvatar} />
-              ) : (
-                <Ionicons name="person-circle-outline" size={26} color={colors.textPrimary} />
-              )}
-            </TouchableOpacity>
+            <View style={styles.headerActions}>
+              {/* Кнопка E2EE-звонка: открывает CallScreen с outgoing=true,
+                  который через EncryptedCall.start() инициирует offer. */}
+              <TouchableOpacity
+                onPress={() => {
+                  if (!peerId) return;
+                  navigation.navigate('Call', {
+                    matchId,
+                    peerId,
+                    peerName: peerName || otherName || null,
+                    outgoing: true,
+                  });
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Позвонить"
+                style={styles.headerButton}
+              >
+                <Ionicons name="call-outline" size={22} color={colors.accent} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() =>
+                  navigation.navigate('ProfileDetail', { profileId: peerProfileId, fromChat: true })
+                }
+                accessibilityRole="button"
+                accessibilityLabel="Открыть анкету"
+                style={{ paddingHorizontal: 12, paddingVertical: 4 }}
+              >
+                {peerPhoto ? (
+                  <Image source={{ uri: peerPhoto }} style={styles.headerAvatar} />
+                ) : (
+                  <Ionicons name="person-circle-outline" size={26} color={colors.textPrimary} />
+                )}
+              </TouchableOpacity>
+            </View>
           )
         : undefined,
     });
@@ -887,6 +907,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   headerButton: { marginLeft: 16 },
+  headerActions: { flexDirection: 'row', alignItems: 'center' },
   headerButtonText: { fontSize: 13, color: colors.textSecondary },
   blockText: { color: colors.danger },
   keyWarning: {

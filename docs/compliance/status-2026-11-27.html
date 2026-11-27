@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>ADDate — статус задач на 27.11.2026</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.45;
+    color: #1f2328;
+    margin: 0;
+  }
+  h1 { font-size: 20pt; margin: 0 0 4px; color: #111; }
+  .subtitle { color: #57606a; font-size: 9.5pt; margin-bottom: 18px; }
+  h2 {
+    font-size: 14pt;
+    margin: 22px 0 8px;
+    padding-bottom: 4px;
+    border-bottom: 2px solid #d0d7de;
+    color: #111;
+    page-break-after: avoid;
+  }
+  h3 { font-size: 11.5pt; margin: 16px 0 6px; color: #24292f; page-break-after: avoid; }
+  p { margin: 6px 0; }
+  ul, ol { margin: 6px 0 6px 20px; padding: 0; }
+  li { margin: 3px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 12px; font-size: 9.5pt; page-break-inside: auto; }
+  tr { page-break-inside: avoid; }
+  th, td { border: 1px solid #d0d7de; padding: 5px 7px; text-align: left; vertical-align: top; }
+  th { background: #f6f8fa; font-weight: 600; }
+  .done { color: #1a7f37; font-weight: 600; white-space: nowrap; }
+  .partial { color: #9a6700; font-weight: 600; white-space: nowrap; }
+  .open { color: #cf222e; font-weight: 600; white-space: nowrap; }
+  .note {
+    background: #f6f8fa;
+    border-left: 3px solid #0969da;
+    padding: 8px 10px;
+    margin: 10px 0;
+    font-size: 9.5pt;
+  }
+  code {
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 9pt;
+    background: #f3f4f6;
+    padding: 1px 4px;
+    border-radius: 3px;
+  }
+  .footer {
+    margin-top: 26px;
+    padding-top: 8px;
+    border-top: 1px solid #d0d7de;
+    color: #57606a;
+    font-size: 8.5pt;
+  }
+  .page-break { page-break-before: always; }
+</style>
+</head>
+<body>
+
+<h1>ADDate — статус задач</h1>
+<div class="subtitle">
+  Сводка реализованного, текущего и будущего · 27.11.2026 · версия приложения 0.0.38 · ветка <code>master</code>
+</div>
+
+<h2>1. Реализовано</h2>
+
+<h3>1.1. Аудит безопасности (13.11.2026)</h3>
+<p>Миграции применяются вручную через Supabase SQL Editor. Все шаги идемпотентны и выполнены отдельными транзакциями.</p>
+
+<table>
+  <thead>
+    <tr><th style="width:52px">Пункт</th><th>Что сделано</th><th style="width:150px">Статус</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>C1</td><td><code>profiles</code>: отозван INSERT/DELETE, триггер защиты служебных полей, <code>DEFAULT 'pending'</code></td><td class="done">закрыт</td></tr>
+    <tr><td>C2</td><td><code>user_consents</code> + RPC <code>accept_documents()</code>, <code>SignUp.tsx</code> переведён</td><td class="done">закрыт</td></tr>
+    <tr><td>C3</td><td><code>no_self_match</code>, чтение сообщений только для <code>matched</code></td><td class="partial">частично</td></tr>
+    <tr><td>C4</td><td>Storage <code>report-images</code>: доступ только автору и админу</td><td class="done">закрыт</td></tr>
+    <tr><td>C5</td><td>Публичный бакет <code>avatars</code></td><td class="open">не закрыт</td></tr>
+    <tr><td>C6</td><td><code>moderation_note</code>: отозван <code>SELECT</code>, клиент читает через <code>my_profile()</code>, панель — через <code>admin_profiles()</code></td><td class="done">закрыт</td></tr>
+    <tr><td>C7</td><td><code>reports</code>: только автор и админ</td><td class="done">закрыт</td></tr>
+    <tr><td>C8</td><td>Дефолт <code>moderation_status</code> исправлен</td><td class="done">закрыт*</td></tr>
+    <tr><td>C9</td><td>Ключи и KEK в <code>expo-secure-store</code> с миграцией из AsyncStorage</td><td class="partial">частично</td></tr>
+    <tr><td>C10</td><td>Аутентификация ключей и forward secrecy</td><td class="open">не закрыто</td></tr>
+    <tr><td>C11</td><td><code>EXECUTE</code> на гео-функциях только <code>authenticated</code></td><td class="done">закрыт</td></tr>
+    <tr><td>C12</td><td>Расшифрованные фото перенесены в <code>cacheDirectory</code></td><td class="done">закрыт</td></tr>
+    <tr><td>C13</td><td>Бэкапы БД и проверка restore</td><td class="open">не закрыто</td></tr>
+    <tr><td>C14</td><td>Исходники Edge-функций</td><td class="open">не закрыто</td></tr>
+  </tbody>
+</table>
+<p style="font-size:9pt;color:#57606a">* Продуктовое решение об автоодобрении новых анкет остаётся открытым.</p>
+
+<p>Дополнительно: RPC <code>admin_profiles()</code> и <code>admin_profile_names()</code>, <code>USAGE</code> на схему <code>private</code>, восстановление колоночных прав после отката <code>ROLLBACK_20260926000000.sql</code>.</p>
+
+<h3>1.2. E2EE-переписка</h3>
+<ul>
+  <li>Защищённое хранение приватного ключа и KEK (<code>secureStorage.ts</code>), миграция старых значений.</li>
+  <li>Резервная копия ключа, восстановление на новом устройстве, синхронизация при смене пароля.</li>
+  <li>Идемпотентная отправка: <code>client_message_id</code> + уникальный индекс, обработка <code>23505</code>, защита от двойного тапа.</li>
+  <li>Защита от replay: запоминание nonce переписки.</li>
+  <li>TOFU + отпечаток ключа, баннер и блокировка отправки при смене ключа собеседника.</li>
+  <li>Удаление «у себя» (<code>message_deletions</code>) и «у обоих» (RPC <code>delete_message()</code>, только автор, очистка <code>content</code>/<code>image_path</code>).</li>
+  <li>Realtime на UPDATE/DELETE, long-press меню в <code>Chat.tsx</code> и <code>QuickChatModal</code>.</li>
+  <li>Push без текста: канал <code>default</code>, <code>lockscreenVisibility = PRIVATE</code>.</li>
+  <li>Предупреждения при неудачном восстановлении и при Telegram-входе без копии (<code>SignIn.tsx</code>).</li>
+</ul>
+
+<h3>1.3. Прочее</h3>
+<ul>
+  <li>Обычный пользователь больше не меняет имя и дату рождения; чувствительные поля скрыты по умолчанию; раздел «Моя приватность» (включая веб-маршрут).</li>
+  <li>Исправлен перенос текста в пузырях по 1–2 буквы (0.0.38).</li>
+  <li>Собраны и проверены APK 0.0.36, 0.0.37, 0.0.38; <code>expo-secure-store</code> подтверждён в dex; <code>tsc</code> без ошибок.</li>
+  <li>Обновлены отчёты аудита, статусы миграций и версии.</li>
+</ul>
+
+<h2>2. Текущее</h2>
+<p>Активной разработки нет — код и миграции в согласованном состоянии, рабочее дерево чистое, последний коммит <code>1febb8b5</code>.</p>
+<p>Осталось только то, что нельзя выполнить в репозитории:</p>
+<ol>
+  <li><strong>Установить APK 0.0.38</strong> (<code>android/app/build/outputs/apk/release/app-release.apk</code>) и прогнать сценарии на устройстве:
+    <ul>
+      <li>перенос текста в пузырях;</li>
+      <li>вход по паролю и расшифровка старой истории;</li>
+      <li>двойной тап по «Отправить» → одно сообщение;</li>
+      <li>long-press → удаление у себя / у обоих;</li>
+      <li>кнопка «Ключ» с отпечатком и баннер при смене ключа;</li>
+      <li>push: в шторке только имя и «Новое сообщение», на локскрине содержимое скрыто.</li>
+    </ul>
+  </li>
+  <li><strong>Проверка push</strong> заблокирована отсутствием Android-устройства с реальными уведомлениями.</li>
+</ol>
+
+<h2 class="page-break">3. Будущее</h2>
+
+<h3>3.1. Высокий приоритет (данные и доступ)</h3>
+<ol>
+  <li><strong>C3 — взаимность лайков.</strong> <code>status = 'matched'</code> всё ещё ставит клиент. Нужен RPC, который проверяет встречный лайк; иначе можно открыть переписку с незнакомым.</li>
+  <li><strong>C5 — приватный бакет <code>avatars</code>.</strong> При <code>show_photos = false</code> скрывается только ссылка, файл доступен по прямой. Нужны приватный бакет, signed URL и миграция сохранённых ссылок.</li>
+  <li><strong>C8 — решение по модерации.</strong> Либо автоодобрение после заполнения анкеты, либо явная очередь для модератора.</li>
+  <li><strong>Админ-контур:</strong> MFA администратору, audit log действий модерации, подтверждение email и усиление парольной политики.</li>
+</ol>
+
+<h3>3.2. E2EE</h3>
+<ol start="5">
+  <li>Double Ratchet / X3DH — forward secrecy и пост-компрометационная стойкость.</li>
+  <li>Кодовая фраза восстановления для аккаунтов без пароля (Telegram).</li>
+  <li>Нативный KDF (Argon2id) вместо PBKDF2; минимум — поднять итерации до ≥ 210 000 с ленивой миграцией.</li>
+  <li>Сверка ключей через QR или общий код, а не только TOFU.</li>
+  <li>Удаление превью последнего сообщения из <code>matches</code> при «удалить у себя».</li>
+  <li>Очистка старых расшифрованных фото из <code>documentDirectory</code> у пользователей ≤ 0.0.35.</li>
+  <li>Перевод панели модерации с <code>localStorage</code> на сессионное хранение ключа.</li>
+</ol>
+
+<h3>3.3. Инфраструктура и релиз</h3>
+<ol start="12">
+  <li><strong>C13 — бэкапы БД:</strong> документировать процесс и провести проверку restore.</li>
+  <li><strong>C14 — Edge-функции:</strong> вернуть в репозиторий исходники <code>telegram-start</code>, <code>telegram-exchange</code>, <code>delete-account</code>; отдельно проверить, что <code>delete-account</code> требует JWT и удаляет только <code>auth.uid()</code>.</li>
+  <li><strong>Google Play Data Safety:</strong> актуализировать черновик перед Android-релизом (после переноса production в РФ).</li>
+  <li>Настроить линтер: <code>npx expo lint</code> не настроен, автоподстановка eslint ломает репозиторий.</li>
+</ol>
+
+<h3>3.4. Задокументированные ограничения (не баги)</h3>
+<ul>
+  <li>«Удалить у обоих» не отзывает уже полученное: скриншоты, сохранённые фото, прочитанный текст.</li>
+  <li>Компрометация долгосрочного ключа раскрывает всю переписку, зашифрованную на этот ключ.</li>
+  <li>Подмена ключа до первого контакта не обнаруживается (TOFU).</li>
+  <li>Копии ключа в старых резервных копиях ОС, сделанных до 0.0.36.</li>
+</ul>
+
+<div class="note">
+  Полные отчёты: <code>docs/compliance/security-audit-2026-11-13.md</code>,
+  <code>docs/compliance/e2ee-audit-2026-11-13.md</code>,
+  <code>docs/compliance/google-play-data-safety-draft.md</code>.
+</div>
+
+<div class="footer">
+  ADDate · сводка задач · 27.11.2026 · сборка 0.0.38 · master @ 1febb8b5
+</div>
+
+</body>
+</html>

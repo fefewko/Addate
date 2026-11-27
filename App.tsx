@@ -36,6 +36,7 @@ import BlockedUsers from './src/screens/BlockedUsers';
 import IncomingLikes from './src/screens/IncomingLikes';
 import ProfileDetail from './src/screens/ProfileDetail';
 import AuthCallback from './src/screens/AuthCallback';
+import CallScreen from './src/screens/CallScreen';
 import LoadError from './src/ui/LoadError';
 import AlertHost from './src/ui/AlertHost';
 import ErrorBoundary from './src/ui/ErrorBoundary';
@@ -429,6 +430,11 @@ export default function App() {
         <Stack.Screen name="SignIn" component={SignIn} options={{ headerShown: false }} />
         <Stack.Screen name="SignUp" component={SignUp} options={{ headerShown: false }} />
         <Stack.Screen name="AuthCallback" component={AuthCallback} options={{ headerShown: false }} />
+        <Stack.Screen
+          name="Call"
+          component={CallScreen}
+          options={{ headerShown: false, animation: 'fade' }}
+        />
         <Stack.Screen
           name="ProfileSetup"
           component={ProfileSetup}
