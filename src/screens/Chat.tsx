@@ -763,29 +763,56 @@ export default function Chat() {
 
           const deleted = !!item.deleted_at;
 
-          let bubble: React.ReactNode;
+          // Стили пузыря вешаем на сам TouchableOpacity, а не на вложенный View:
+          // maxWidth: '78%' должен считаться от ширины строки сообщения. Внутри
+          // обёртки без собственной ширины процент разрешается от её содержимого,
+          // и текст схлопывается в одну-две буквы на строку.
+          const bubbleStyle = [
+            styles.bubble,
+            isMine ? styles.bubbleMine : styles.bubbleTheirs,
+          ];
+
           if (item.image_path && !deleted) {
-            const url = item.image_path ? decryptedImages[item.image_path] ?? imageUrls[item.image_path] : null;
-            bubble = (
-              <View style={[styles.bubble, styles.imageBubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}>
-                {url ? (
-                  <TouchableOpacity onPress={() => setPreviewUrl(url)}>
+            const path = item.image_path;
+            const url = decryptedImages[path] ?? imageUrls[path] ?? null;
+            return (
+              <View style={[styles.messageRow, isMine && styles.messageRowMine]}>
+                {!isMine && (avatar ?? <View style={styles.messageAvatarSpacer} />)}
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  delayLongPress={350}
+                  onLongPress={() => handleMessageActions(item)}
+                  onPress={() => {
+                    if (url) setPreviewUrl(url);
+                  }}
+                  style={[styles.bubble, styles.imageBubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}
+                >
+                  {url ? (
                     <Image
                       source={{ uri: url }}
                       style={styles.chatImage}
-                      onError={() => refreshImage(item.image_path as string)}
+                      onError={() => refreshImage(path)}
                     />
-                  </TouchableOpacity>
-                ) : (
-                  <View style={[styles.chatImage, styles.chatImageLoading]}>
-                    <ActivityIndicator color={colors.white} />
-                  </View>
-                )}
+                  ) : (
+                    <View style={[styles.chatImage, styles.chatImageLoading]}>
+                      <ActivityIndicator color={colors.white} />
+                    </View>
+                  )}
+                </TouchableOpacity>
               </View>
             );
-          } else {
-            bubble = (
-              <View style={[styles.bubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}>
+          }
+
+          return (
+            <View style={[styles.messageRow, isMine && styles.messageRowMine]}>
+              {!isMine && (avatar ?? <View style={styles.messageAvatarSpacer} />)}
+              <TouchableOpacity
+                activeOpacity={0.85}
+                disabled={deleted}
+                delayLongPress={350}
+                onLongPress={() => handleMessageActions(item)}
+                style={bubbleStyle}
+              >
                 <Text
                   style={
                     deleted
@@ -805,20 +832,6 @@ export default function Chat() {
                       ? item.content
                       : ''}
                 </Text>
-              </View>
-            );
-          }
-
-          return (
-            <View style={[styles.messageRow, isMine && styles.messageRowMine]}>
-              {!isMine && (avatar ?? <View style={styles.messageAvatarSpacer} />)}
-              <TouchableOpacity
-                activeOpacity={0.85}
-                disabled={deleted}
-                delayLongPress={350}
-                onLongPress={() => handleMessageActions(item)}
-              >
-                {bubble}
               </TouchableOpacity>
             </View>
           );

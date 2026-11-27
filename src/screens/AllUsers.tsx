@@ -731,29 +731,33 @@ function QuickChatModal({
               const isMine = item.sender_id === myId;
               const deleted = !!item.deleted_at;
 
+              // Стили пузыря — на самом TouchableOpacity. Вложенный View без
+              // собственной ширины ломает maxWidth: '78%', и текст переносится
+              // по одной-две буквы.
               if (item.image_path && !deleted) {
-                const url = item.image_path ? decryptedImages[item.image_path] ?? imageUrls[item.image_path] : null;
+                const path = item.image_path;
+                const url = decryptedImages[path] ?? imageUrls[path] ?? null;
                 return (
                   <TouchableOpacity
                     activeOpacity={0.85}
                     delayLongPress={350}
                     onLongPress={() => handleMessageActions(item)}
+                    onPress={() => {
+                      if (url) setPreviewUrl(url);
+                    }}
+                    style={[styles.bubble, styles.imageBubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}
                   >
-                    <View style={[styles.bubble, styles.imageBubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}>
-                      {url ? (
-                        <TouchableOpacity onPress={() => setPreviewUrl(url)}>
-                          <Image
-                            source={{ uri: url }}
-                            style={styles.chatImage}
-                            onError={() => refreshImage(item.image_path as string)}
-                          />
-                        </TouchableOpacity>
-                      ) : (
-                        <View style={[styles.chatImage, styles.chatImageLoading]}>
-                          <ActivityIndicator color={colors.white} />
-                        </View>
-                      )}
-                    </View>
+                    {url ? (
+                      <Image
+                        source={{ uri: url }}
+                        style={styles.chatImage}
+                        onError={() => refreshImage(path)}
+                      />
+                    ) : (
+                      <View style={[styles.chatImage, styles.chatImageLoading]}>
+                        <ActivityIndicator color={colors.white} />
+                      </View>
+                    )}
                   </TouchableOpacity>
                 );
               }
@@ -764,20 +768,23 @@ function QuickChatModal({
                   disabled={deleted}
                   delayLongPress={350}
                   onLongPress={() => handleMessageActions(item)}
+                  style={[styles.bubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}
                 >
-                  <View style={[styles.bubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}>
-                    <Text
-                      style={
-                        deleted
-                          ? styles.deletedText
-                          : isMine
-                            ? styles.bubbleTextMine
-                            : styles.bubbleTextTheirs
-                      }
-                    >
-                      {deleted ? 'Сообщение удалено' : item.content}
-                    </Text>
-                  </View>
+                  <Text
+                    style={
+                      deleted
+                        ? styles.deletedText
+                        : isMine
+                          ? styles.bubbleTextMine
+                          : styles.bubbleTextTheirs
+                    }
+                  >
+                    {deleted
+                      ? 'Сообщение удалено'
+                      : typeof item.content === 'string'
+                        ? item.content
+                        : ''}
+                  </Text>
                 </TouchableOpacity>
               );
             }}
