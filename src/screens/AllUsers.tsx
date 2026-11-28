@@ -705,7 +705,7 @@ function QuickChatModal({
             <TouchableOpacity
               onPress={() => {
                 if (!myId || !matchId || !recipientId) return;
-                navigation.navigate('Call', { matchId, peerId: recipientId, outgoing: true });
+                navigation.navigate('Call', { matchId, peerId: recipientId, peerName: otherName || null, outgoing: true });
               }}
               style={{ padding: 4 }}
               accessibilityRole="button"

@@ -2,14 +2,17 @@
   "expo": {
     "name": "ADDate",
     "slug": "ADDate",
-    "version": "0.0.39",
+    "version": "0.0.40",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "addate",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#121212",
     "ios": {
-      "icon": "./assets/icon.png"
+      "icon": "./assets/icon.png",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Разрешите доступ к микрофону, чтобы разговаривать во время звонка."
+      }
     },
     "android": {
       "adaptiveIcon": {

@@ -17,6 +17,7 @@ import { supabase } from './src/lib/supabase';
 import { getOrCreateIdentity } from './src/lib/e2ee';
 import { syncKeyBackupWithCache } from './src/lib/keyBackup';
 import { registerForPushNotifications } from './src/lib/pushNotifications';
+import { listenForCallInvites } from './src/lib/callInvites';
 import { isWeb, buildLinking, documentTitleFormatter } from './src/lib/webLinks';
 
 import SignIn from './src/screens/SignIn';
@@ -268,6 +269,43 @@ function Tabs() {
       notificationSub?.remove();
     };
   }, [sendHeartbeat, refreshUnreadCount, ensureE2EEIdentity, navigation]);
+
+  // Входящие звонки. Приглашение приходит в персональный канал
+  // rtc-invite-<userId>, поэтому входящий виден с любого экрана, а не только
+  // из чата. CallScreen сам подпишется на канал звонка и подтвердит готовность
+  // до того, как вызывающий отправит offer.
+  useEffect(() => {
+    let unsubscribe: (() => void) | null = null;
+    let cancelled = false;
+
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (cancelled || !user) return;
+
+      unsubscribe = listenForCallInvites(user.id, (invite) => {
+        if (!navigationRef.isReady()) return;
+        // Второй звонок во время активного не открываем поверх первого.
+        if (navigationRef.getCurrentRoute()?.name === 'Call') {
+          log.debug('RTC-CALL: приглашение проигнорировано, экран звонка уже открыт');
+          return;
+        }
+        navigationRef.navigate('Call', {
+          matchId: invite.matchId,
+          peerId: invite.from,
+          peerName: invite.fromName,
+          callId: invite.callId,
+          outgoing: false,
+        });
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, []);
 
   return (
     <Tab.Navigator

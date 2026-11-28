@@ -1,19 +1,24 @@
 // src/screens/CallScreen.tsx
 //
 // Экран голосового звонка E2EE между пользователями (task: «зашифрованные
-// звонки между пользователями напрямым через приложение»).
+// звонки между пользователями напрямую через приложение»).
 //
 // Поток:
 //   - исходящий (outgoing): вызывающий нажимает кнопку в чате → CallScreen
-//     запускает EncryptedCall.start() → offer → answer → active.
-//   - входящий (incoming): вызываемый получает offer → startIncoming() →
-//     answer → active; UI предлагает принять/отклонить.
+//     запускает EncryptedCall.start(): подписка на канал звонка → приглашение
+//     собеседнику → ожидание ready → offer → answer → active.
+//   - входящий (incoming): приглашение приходит глобально (App.tsx) → CallScreen
+//     подписывается на канал звонка и отправляет ready → получает offer →
+//     предлагает принять/отклонить; после «принять» уходит answer.
 //
 // После успешного соединения (WebRTC connected) медиа идёт напрямую P2P,
 // шифрование — WebRTC DTLS-SRTP; сервер в контуре не участвует.
+//
+// На экране есть журнал диагностики: в релизной сборке console.log отключён,
+// поэтому без него на устройстве не видно, на каком шаге рвётся соединение.
 
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { colors } from '../lib/theme';
@@ -26,6 +31,7 @@ type CallRouteParams = {
   matchId: string;
   peerId?: string;
   peerName?: string | null;
+  callId?: string;
   outgoing?: boolean;
 };
 
@@ -46,9 +52,12 @@ export default function CallScreen() {
   const [state, setState] = useState<CallState>('idle');
   const [error, setError] = useState<string | null>(null);
   const [connectedAt, setConnectedAt] = useState<number | null>(null);
-  const [seconds, setSeconds] = useState(0);
+  const [muted, setMuted] = useState(false);
+  const [logs, setLogs] = useState<string[]>([]);
+  const [, forceTick] = useState(0);
 
   const callRef = useRef<EncryptedCall | null>(null);
+  const logScrollRef = useRef<ScrollView | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -60,19 +69,35 @@ export default function CallScreen() {
       } = await supabase.auth.getUser();
       const myId = user?.id ?? '';
       if (!myId) {
-        setError('Не удалось определить пользователя для звонка.');
+        if (!cancelled) {
+          setError('Не удалось определить пользователя для звонка.');
+          setState('failed');
+        }
+        return;
+      }
+      if (!params.matchId) {
+        if (!cancelled) {
+          setError('Не удалось определить диалог для звонка.');
+          setState('failed');
+        }
         return;
       }
       if (cancelled) return;
 
-      call = createEncryptedCall({ matchId: params.matchId, peerId: params.peerId ?? '', peerName: params.peerName ?? null, myId });
+      call = createEncryptedCall({
+        matchId: params.matchId,
+        peerId: params.peerId ?? '',
+        peerName: params.peerName ?? null,
+        callId: params.callId,
+        myId,
+      });
       callRef.current = call;
 
       call.setHandlers({
         onStateChange: (next) => {
           if (cancelled) return;
           setState(next);
-          if (next === 'active') setConnectedAt(Date.now());
+          if (next === 'active') setConnectedAt((prev) => prev ?? Date.now());
         },
         onError: (msg) => {
           if (cancelled) return;
@@ -81,23 +106,37 @@ export default function CallScreen() {
         onConnected: () => {
           log.debug('RTC-CALL: соединение установлено');
         },
+        onLog: (line) => {
+          if (cancelled) return;
+          setLogs((prev) => {
+            const next = [...prev, line];
+            return next.length > 120 ? next.slice(next.length - 120) : next;
+          });
+        },
       });
 
       if (!params.outgoing) {
-        // Каллата обязан быть подписан на rtc-call-<matchId> ДО получения offer,
-        // иначе broadcast-сигнал потеряется. Вызываем ensureChannel при открытии
-        // экрана входящего звонка (пользователь может нажать «принять» в любой момент).
-        void call.ensureChannel();
-      }
-
-      if (params.outgoing) {
+        // Входящий: подписываемся на канал звонка и только после успешной
+        // подписки подтверждаем готовность. Вызывающий ждёт ready и лишь затем
+        // отправляет offer — иначе broadcast потеряется.
         try {
-          await call.start();
+          const ok = await call.ensureChannel();
+          if (ok) await call.notifyReady();
         } catch (e) {
           if (!cancelled) {
-            setError('Не удалось установить соединение: ' + errorMessage(e));
+            setError('Не удалось принять приглашение: ' + errorMessage(e));
             setState('failed');
           }
+        }
+        return;
+      }
+
+      try {
+        await call.start();
+      } catch (e) {
+        if (!cancelled) {
+          setError('Не удалось установить соединение: ' + errorMessage(e));
+          setState('failed');
         }
       }
     })();
@@ -108,11 +147,13 @@ export default function CallScreen() {
       callRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.matchId, params.peerId, params.peerName, params.outgoing]);
+  }, [params.matchId, params.peerId, params.peerName, params.callId, params.outgoing]);
 
   useEffect(() => {
     if (state !== 'active') return;
-    const timer = setInterval(() => setSeconds((s) => s + 1), 1000);
+    // Тик раз в секунду: formatDuration считает от connectedAt и Date.now(),
+    // поэтому достаточно перерисовать компонент.
+    const timer = setInterval(() => forceTick((t) => t + 1), 1000);
     return () => clearInterval(timer);
   }, [state]);
 
@@ -142,7 +183,9 @@ export default function CallScreen() {
   const toggleMute = () => {
     const call = callRef.current;
     if (!call) return;
-    call.setMuted(!call.muted);
+    const next = !call.muted;
+    call.setMuted(next);
+    setMuted(next);
   };
 
   const titleForState = (): string => {
@@ -150,7 +193,9 @@ export default function CallScreen() {
       case 'outgoing':
         return 'Вызов…';
       case 'incoming':
-        return 'Звонок…';
+        return 'Входящий звонок';
+      case 'connecting':
+        return 'Соединение…';
       case 'active':
         return 'Звонок';
       case 'ended':
@@ -162,19 +207,23 @@ export default function CallScreen() {
     }
   };
 
+  const inProgress = state === 'outgoing' || state === 'connecting' || state === 'active';
+
   return (
     <View style={styles.container}>
       <View style={styles.content}>
         <Text style={styles.peerName}>{params.peerName || 'Собеседник'}</Text>
         <Text style={styles.stateText}>{titleForState()}</Text>
 
-        {state === 'outgoing' && <ActivityIndicator size="large" color={colors.accent} />}
+        {(state === 'outgoing' || state === 'connecting') && (
+          <ActivityIndicator size="large" color={colors.accent} />
+        )}
         {state === 'failed' && <Text style={styles.errorText}>{error || 'Не удалось установить соединение.'}</Text>}
 
         {state === 'active' && <Text style={styles.timer}>{formatDuration(connectedAt)}</Text>}
 
         <View style={styles.actions}>
-          {(state === 'active' || state === 'outgoing') && (
+          {inProgress && (
             <TouchableOpacity style={styles.endButton} onPress={() => void hangup()} accessibilityRole="button">
               <Ionicons name="call" size={30} color={colors.danger} />
             </TouchableOpacity>
@@ -190,13 +239,42 @@ export default function CallScreen() {
               </TouchableOpacity>
             </>
           )}
+
+          {(state === 'ended' || state === 'failed') && (
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => navigation.goBack()}
+              accessibilityRole="button"
+            >
+              <Text style={styles.closeButtonText}>Закрыть</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
-        {state === 'active' && (
+        {(state === 'active' || state === 'connecting') && (
           <TouchableOpacity style={styles.muteButton} onPress={toggleMute} accessibilityRole="button">
-            <Ionicons name={callRef.current?.muted ? 'mic-off-outline' : 'mic-outline'} size={22} color={colors.textPrimary} />
+            <Ionicons name={muted ? 'mic-off-outline' : 'mic-outline'} size={22} color={colors.textPrimary} />
           </TouchableOpacity>
         )}
+      </View>
+
+      <View style={styles.logPanel}>
+        <Text style={styles.logTitle}>Диагностика соединения</Text>
+        <ScrollView
+          ref={logScrollRef}
+          style={styles.logScroll}
+          onContentSizeChange={() => logScrollRef.current?.scrollToEnd({ animated: false })}
+        >
+          {logs.length === 0 ? (
+            <Text style={styles.logLine}>Ожидание событий…</Text>
+          ) : (
+            logs.map((line, index) => (
+              <Text key={`${index}-${line.slice(0, 24)}`} style={styles.logLine}>
+                {line}
+              </Text>
+            ))
+          )}
+        </ScrollView>
       </View>
     </View>
   );
@@ -211,6 +289,29 @@ const styles = StyleSheet.create({
   errorText: { fontSize: 14, color: colors.danger, textAlign: 'center', marginBottom: 20 },
   actions: { flexDirection: 'row', alignItems: 'center', marginTop: 30 },
   endButton: { padding: 18, borderRadius: 40, backgroundColor: 'rgba(255,59,48,0.12)' },
-  actionButton: { padding: 18, borderRadius: 40, backgroundColor: colors.surface },
+  actionButton: { padding: 18, borderRadius: 40, backgroundColor: colors.surface, marginHorizontal: 12 },
+  closeButton: {
+    paddingHorizontal: 28,
+    paddingVertical: 12,
+    borderRadius: 24,
+    backgroundColor: colors.surface,
+  },
+  closeButtonText: { color: colors.textPrimary, fontSize: 16, fontWeight: '600' },
   muteButton: { marginTop: 40, padding: 12 },
+  logPanel: {
+    maxHeight: 220,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  logTitle: { color: colors.textSecondary, fontSize: 12, fontWeight: '600', marginBottom: 4 },
+  logScroll: { maxHeight: 180 },
+  logLine: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    fontFamily: 'monospace',
+    marginBottom: 1,
+  },
 });
